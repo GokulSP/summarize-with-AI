@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 const USER_JS = 'Summarize with AI.user.js';
 const META_JS = 'Summarize with AI.meta.js';
+const PACKAGE_JSON = 'package.json';
 
 function formatUserscriptMetadata() {
 	console.log('Formatting userscript metadata...');
@@ -75,15 +76,29 @@ function syncMetadata() {
 	const metadata = content.substring(metaStart, metaEnd + '// ==/UserScript=='.length);
 	writeFileSync(META_JS, `${metadata}\n`, 'utf-8');
 
-	const versionMatch = metadata.match(/@version\s+(.+)/);
-	console.log(`✓ Metadata synced to ${META_JS} (v${versionMatch?.[1] ?? 'unknown'})`);
+	const version = metadata.match(/@version\s+(.+)/)?.[1]?.trim();
+	console.log(`✓ Metadata synced to ${META_JS} (v${version ?? 'unknown'})`);
 
 	execSync(`git add "${META_JS}"`, { stdio: 'pipe' });
+	return version;
+}
+
+function syncPackageVersion(version) {
+	if (!version) return;
+
+	const pkg = JSON.parse(readFileSync(PACKAGE_JSON, 'utf-8'));
+	if (pkg.version === version) return;
+
+	pkg.version = version;
+	writeFileSync(PACKAGE_JSON, `${JSON.stringify(pkg, null, '\t')}\n`, 'utf-8');
+	execSync(`git add "${PACKAGE_JSON}"`, { stdio: 'pipe' });
+	console.log(`✓ package.json version synced to ${version}`);
 }
 
 try {
 	formatUserscriptMetadata();
-	syncMetadata();
+	const version = syncMetadata();
+	syncPackageVersion(version);
 } catch (error) {
 	console.error(`Error: ${error.message}`);
 	process.exit(1);

@@ -40,5 +40,13 @@
 			"semicolons": "always",
 			"arrowParentheses": "asNeeded"
 		}
+	},
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
 	}
 }

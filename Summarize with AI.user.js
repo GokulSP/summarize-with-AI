@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
-// @namespace   https://github.com/insign/userscripts
-// @version     2026.07.03.02
+// @namespace   https://github.com/GokulSP/Summarize-with-AI
+// @version     2026.07.06.01
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -1549,7 +1549,13 @@ Format exactly as shown:
 		return tempDiv.innerHTML;
 	}
 
-	function handleApiResponse(response) {
+	/**
+	 * Parses a raw API response into a summary string, or throws with a diagnostic
+	 * message. Pure (no DOM/GM access) so it can run standalone under Vitest.
+	 * @param {{status: number, data: any, statusText?: string, service: string}} response
+	 * @returns {{rawSummary: string, finishReason: string|null, blockType: string|null}}
+	 */
+	function extractSummaryFromResponse(response) {
 		const { status, data, statusText, service } = response;
 
 		if (status < 200 || status >= 300) {
@@ -1604,6 +1610,11 @@ Format exactly as shown:
 			);
 		}
 
+		return { rawSummary, finishReason, blockType };
+	}
+
+	function handleApiResponse(response) {
+		const { rawSummary } = extractSummaryFromResponse(response);
 		const cleanedSummary = cleanSummaryHTML(rawSummary);
 		state.currentSummary = {
 			title: state.articleData?.title || 'Untitled',
@@ -3272,5 +3283,17 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 	}
 
 	// --- Initialization ---
-	initialize();
+	// `module` only exists when Vitest imports this file for the pure-helper tests below;
+	// it's always undefined in a real userscript/browser context, where init must run.
+	if (typeof module === 'undefined') {
+		initialize();
+	} else {
+		module.exports = {
+			escapeHtml,
+			formatQAAnswer,
+			cleanSummaryHTML,
+			mergeParams,
+			extractSummaryFromResponse,
+		};
+	}
 })();
