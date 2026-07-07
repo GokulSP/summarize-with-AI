@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/Summarize-with-AI
-// @version     2026.07.07.01
+// @version     2026.07.07.02
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -201,6 +201,10 @@ Format exactly as shown:
 
 		async setLatestGeminiCache(modelId) {
 			await GM.setValue(this.keys.GEMINI_CACHE, { modelId, timestamp: Date.now() });
+		},
+
+		async clearLatestGeminiCache() {
+			await GM.setValue(this.keys.GEMINI_CACHE, null);
 		},
 	};
 
@@ -1345,8 +1349,17 @@ Format exactly as shown:
 	}
 
 	function handleSummarizationError(error) {
-		const errorMsg = `Error: ${error.message}`;
+		let errorMsg = `Error: ${error.message}`;
 		console.error('Summarize with AI:', errorMsg, error);
+
+		// The auto-discovered "latest flash" model can occasionally be a variant that
+		// doesn't support plain generateContent (e.g. a live/interactions-only model).
+		// Drop the 24h cache so the next attempt re-resolves and picks a working model.
+		if (state.activeModel.startsWith('gemini') && /Interactions API/i.test(error.message)) {
+			StorageService.clearLatestGeminiCache();
+			errorMsg += ' Please try again — the cached model has been reset.';
+		}
+
 		showSummaryOverlay(`<p style="color: ${CONFIG.styles.colors.error};">${errorMsg}</p>`, true);
 		UIHelpers.hideDropdown();
 	}
@@ -1469,11 +1482,15 @@ Format exactly as shown:
 						reject(new Error(`Models API error: ${response.status}`));
 						return;
 					}
+					// Exclude flash variants built for a different call shape (live/interactions,
+					// audio, image, tts) even though they list generateContent support.
+					const NON_TEXT_VARIANT = /live|audio|tts|image|native-audio|realtime/;
 					const flashModels = (data.models || [])
 						.filter(m => {
 							const id = m.name?.replace('models/', '');
 							return (
 								id?.includes('flash') &&
+								!NON_TEXT_VARIANT.test(id) &&
 								(m.supportedGenerationMethods || []).includes('generateContent')
 							);
 						})
