@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/Summarize-with-AI
-// @version     2026.07.07.02
+// @version     2026.07.07.03
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -1322,6 +1322,10 @@ Format exactly as shown:
 		return articleData;
 	}
 
+	// Known-stable text model to fall back to if the auto-discovered "latest flash"
+	// model turns out to be a managed-agent/live variant requiring the Interactions API.
+	const GEMINI_SAFE_FALLBACK = { id: 'gemini-3.5-flash', name: 'Flash', service: 'gemini' };
+
 	async function executeSummarization(articleData, validationResult) {
 		const { modelConfig, apiKey, service, modelDisplayName } = validationResult;
 
@@ -1334,9 +1338,26 @@ Format exactly as shown:
 			title: articleData.title,
 			content: articleData.content,
 		};
-		const response = await sendApiRequest(service, apiKey, payload, modelConfig);
 
-		handleApiResponse(response);
+		try {
+			const response = await sendApiRequest(service, apiKey, payload, modelConfig);
+			handleApiResponse(response);
+		} catch (error) {
+			const canFallBack =
+				service === 'gemini' &&
+				modelConfig.id !== GEMINI_SAFE_FALLBACK.id &&
+				/Interactions API/i.test(error.message);
+			if (!canFallBack) throw error;
+
+			console.warn(
+				'Summarize with AI: Auto-discovered Gemini model requires the Interactions API, retrying with',
+				GEMINI_SAFE_FALLBACK.id,
+			);
+			await StorageService.clearLatestGeminiCache();
+			showLoadingState(GEMINI_SAFE_FALLBACK.name);
+			const response = await sendApiRequest(service, apiKey, payload, GEMINI_SAFE_FALLBACK);
+			handleApiResponse(response);
+		}
 	}
 
 	function showLoadingState(modelDisplayName) {
@@ -1349,17 +1370,8 @@ Format exactly as shown:
 	}
 
 	function handleSummarizationError(error) {
-		let errorMsg = `Error: ${error.message}`;
+		const errorMsg = `Error: ${error.message}`;
 		console.error('Summarize with AI:', errorMsg, error);
-
-		// The auto-discovered "latest flash" model can occasionally be a variant that
-		// doesn't support plain generateContent (e.g. a live/interactions-only model).
-		// Drop the 24h cache so the next attempt re-resolves and picks a working model.
-		if (state.activeModel.startsWith('gemini') && /Interactions API/i.test(error.message)) {
-			StorageService.clearLatestGeminiCache();
-			errorMsg += ' Please try again — the cached model has been reset.';
-		}
-
 		showSummaryOverlay(`<p style="color: ${CONFIG.styles.colors.error};">${errorMsg}</p>`, true);
 		UIHelpers.hideDropdown();
 	}
@@ -1483,8 +1495,9 @@ Format exactly as shown:
 						return;
 					}
 					// Exclude flash variants built for a different call shape (live/interactions,
-					// audio, image, tts) even though they list generateContent support.
-					const NON_TEXT_VARIANT = /live|audio|tts|image|native-audio|realtime/;
+					// audio, image, tts, managed agents) even though they list generateContent support.
+					const NON_TEXT_VARIANT =
+						/live|audio|tts|image|native-audio|realtime|computer-use|agent|deep-research|antigravity|interaction/;
 					const flashModels = (data.models || [])
 						.filter(m => {
 							const id = m.name?.replace('models/', '');
