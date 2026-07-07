@@ -19,8 +19,8 @@
 // @connect     generativelanguage.googleapis.com
 // @require     https://cdnjs.cloudflare.com/ajax/libs/readability/0.6.0/Readability.min.js
 // @require     https://cdnjs.cloudflare.com/ajax/libs/readability/0.6.0/Readability-readerable.min.js
-// @downloadURL https://gokulsp.github.io/Summarize-with-AI/Summarize%20with%20AI.user.js
-// @updateURL   https://gokulsp.github.io/Summarize-with-AI/Summarize%20with%20AI.meta.js
+// @downloadURL https://gokulsp.github.io/summarize-with-AI/Summarize%20with%20AI.user.js
+// @updateURL   https://gokulsp.github.io/summarize-with-AI/Summarize%20with%20AI.meta.js
 // ==/UserScript==
 
 (() => {

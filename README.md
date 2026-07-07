@@ -105,7 +105,7 @@ Currently whitelisted for optimal experience on:
 ### Installation Steps
 
 1. Install a userscript manager for your browser
-2. Click the install link: **[Install Summarize with AI](https://gokulsp.github.io/Summarize-with-AI/Summarize%20with%20AI.user.js)**
+2. Click the install link: **[Install Summarize with AI](https://gokulsp.github.io/summarize-with-AI/Summarize%20with%20AI.user.js)**
 3. Your userscript manager will prompt you to install - click "Install"
 4. Visit any supported site (see [Supported Sites](#supported-sites))
 5. When prompted, enter your Anthropic or Google AI API key
@@ -508,8 +508,8 @@ Test environments:
 The `@downloadURL`/`@updateURL` fields in the userscript header point at this repo's GitHub Pages site:
 
 ```javascript
-// @downloadURL https://gokulsp.github.io/Summarize-with-AI/Summarize%20with%20AI.user.js
-// @updateURL   https://gokulsp.github.io/Summarize-with-AI/Summarize%20with%20AI.meta.js
+// @downloadURL https://gokulsp.github.io/summarize-with-AI/Summarize%20with%20AI.user.js
+// @updateURL   https://gokulsp.github.io/summarize-with-AI/Summarize%20with%20AI.meta.js
 ```
 
 [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) publishes the entire repo root as static files on every push to `main` — no build step, no manual intervention needed. Userscript managers poll `@updateURL` (the lightweight `.meta.js`), compare `@version`, and fetch `@downloadURL` (the full script) when a newer version is found.
