@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/Summarize-with-AI
-// @version     2026.07.07.03
+// @version     2026.07.07.04
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -1326,12 +1326,33 @@ Format exactly as shown:
 	// model turns out to be a managed-agent/live variant requiring the Interactions API.
 	const GEMINI_SAFE_FALLBACK = { id: 'gemini-3.5-flash', name: 'Flash', service: 'gemini' };
 
+	function annotateModelError(error, modelId) {
+		error.message = `[${modelId}] ${error.message}`;
+		return error;
+	}
+
+	// Providers occasionally return a transient 503 under high load; one short retry
+	// resolves most of these without bothering the user with a manual re-click.
+	async function sendApiRequestWithRetry(service, apiKey, payload, modelConfig) {
+		const response = await sendApiRequest(service, apiKey, payload, modelConfig);
+		if (response.status !== 503) return response;
+
+		console.warn(`Summarize with AI: [${modelConfig.id}] 503 (overloaded), retrying once in 3s`);
+		await new Promise(resolve => setTimeout(resolve, 3000));
+		return sendApiRequest(service, apiKey, payload, modelConfig);
+	}
+
 	async function executeSummarization(articleData, validationResult) {
 		const { modelConfig, apiKey, service, modelDisplayName } = validationResult;
 
 		// Update state with current article data so Q&A can access it
 		state.articleData = articleData;
 
+		console.info('Summarize with AI: using model', {
+			id: modelConfig.id,
+			service,
+			name: modelConfig.name,
+		});
 		showLoadingState(modelDisplayName);
 
 		const payload = {
@@ -1340,14 +1361,14 @@ Format exactly as shown:
 		};
 
 		try {
-			const response = await sendApiRequest(service, apiKey, payload, modelConfig);
+			const response = await sendApiRequestWithRetry(service, apiKey, payload, modelConfig);
 			handleApiResponse(response);
 		} catch (error) {
 			const canFallBack =
 				service === 'gemini' &&
 				modelConfig.id !== GEMINI_SAFE_FALLBACK.id &&
 				/Interactions API/i.test(error.message);
-			if (!canFallBack) throw error;
+			if (!canFallBack) throw annotateModelError(error, modelConfig.id);
 
 			console.warn(
 				'Summarize with AI: Auto-discovered Gemini model requires the Interactions API, retrying with',
@@ -1355,8 +1376,17 @@ Format exactly as shown:
 			);
 			await StorageService.clearLatestGeminiCache();
 			showLoadingState(GEMINI_SAFE_FALLBACK.name);
-			const response = await sendApiRequest(service, apiKey, payload, GEMINI_SAFE_FALLBACK);
-			handleApiResponse(response);
+			try {
+				const response = await sendApiRequestWithRetry(
+					service,
+					apiKey,
+					payload,
+					GEMINI_SAFE_FALLBACK,
+				);
+				handleApiResponse(response);
+			} catch (fallbackError) {
+				throw annotateModelError(fallbackError, GEMINI_SAFE_FALLBACK.id);
+			}
 		}
 	}
 
@@ -1896,7 +1926,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			const response = await sendApiRequest(service, apiKey, payload, modelConfig, true);
 
 			if (response.status < 200 || response.status >= 300) {
-				throw new Error(`API Error (${response.status})`);
+				throw new Error(`[${modelConfig.id}] API Error (${response.status})`);
 			}
 
 			// Parse answer based on service
