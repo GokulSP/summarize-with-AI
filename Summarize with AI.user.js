@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/Summarize-with-AI
-// @version     2026.07.07.04
+// @version     2026.07.07.05
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -54,14 +54,10 @@
 			modalFocusDelay: 100,
 			modalCloseTransition: 200,
 			errorFadeOut: 200,
-			scrollStepDelay: 100,
-			scrollBottomDelay: 300,
-			scrollRestoreDelay: 200,
 		},
 
 		// Length & Size Limits
 		limits: {
-			minSelectionLength: 50,
 			defaultMaxTokens: 1000,
 			targetWordCount: 300,
 			bulletPointMaxWords: 20,
@@ -88,9 +84,6 @@
 				name: 'Gemini',
 				baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
 				models: [{ id: 'gemini-3.5-flash', name: 'Flash' }],
-				get defaultParams() {
-					return {};
-				},
 			},
 		},
 
@@ -102,14 +95,6 @@
 				activeModel: '#1A73E8',
 				error: '#d32f2f',
 			},
-			fontWeights: {
-				activeModel: 'normal',
-			},
-		},
-
-		// Gesture Thresholds
-		gestures: {
-			swipeThreshold: 50, // pixels
 		},
 	};
 
@@ -183,10 +168,6 @@ Format exactly as shown:
 			return await GM.setValue(this.keys.API_KEY(service), keyToSave);
 		},
 
-		async clearApiKey(service) {
-			return await this.setApiKey(service, '');
-		},
-
 		async getLatestSonnetCache() {
 			return await GM.getValue(this.keys.SONNET_CACHE, null);
 		},
@@ -233,18 +214,6 @@ Format exactly as shown:
 			} else {
 				showErrorNotification(message);
 			}
-		},
-
-		setButtonState(buttonId, text, disabled = false) {
-			const button = document.getElementById(buttonId);
-			if (button) {
-				button.textContent = text;
-				button.disabled = disabled;
-			}
-		},
-
-		getButton(buttonId) {
-			return document.getElementById(buttonId);
 		},
 	};
 
@@ -314,21 +283,6 @@ Format exactly as shown:
 					onmouseout: e => e.target.blur(),
 				});
 				actionsEl.appendChild(okBtn);
-			} else if (type === 'confirm') {
-				const cancelBtn = createElement('button', {
-					className: 'modal-button modal-button-secondary',
-					textContent: options.cancelText || 'Cancel',
-					onclick: () => this.resolve(false),
-					onmouseout: e => e.target.blur(),
-				});
-				const confirmBtn = createElement('button', {
-					className: 'modal-button modal-button-primary',
-					textContent: options.confirmText || 'OK',
-					onclick: () => this.resolve(true),
-					onmouseout: e => e.target.blur(),
-				});
-				actionsEl.appendChild(cancelBtn);
-				actionsEl.appendChild(confirmBtn);
 			} else if (type === 'prompt') {
 				const cancelBtn = createElement('button', {
 					className: 'modal-button modal-button-secondary',
@@ -427,10 +381,6 @@ Format exactly as shown:
 			return await this.create('alert', { message });
 		},
 
-		async confirm(message, confirmText = 'OK', cancelText = 'Cancel') {
-			return await this.create('confirm', { message, confirmText, cancelText });
-		},
-
 		async prompt(message, defaultValue = '', placeholder = '') {
 			return await this.create('prompt', { message, defaultValue, placeholder });
 		},
@@ -439,21 +389,6 @@ Format exactly as shown:
 	// Helper to convert service name to Title Case
 	const toTitleCase = str => {
 		return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-	};
-
-	// Notification Service - now uses ModalService
-	const NotificationService = {
-		async apiKeyUpdated(service) {
-			await ModalService.alert(`${toTitleCase(service)} API key updated successfully.`);
-		},
-
-		async apiKeyCleared(service) {
-			await ModalService.alert(`${toTitleCase(service)} API key has been cleared.`);
-		},
-
-		async invalidService() {
-			await ModalService.alert('Invalid service provided.');
-		},
 	};
 
 	const state = {
@@ -508,21 +443,9 @@ Format exactly as shown:
 			element.addEventListener('touchend', cancel);
 			element.addEventListener('touchmove', cancel);
 			element.addEventListener('touchcancel', cancel);
-
-			// Return cleanup function
-			return () => {
-				element.removeEventListener('mousedown', start);
-				element.removeEventListener('mouseup', cancel);
-				element.removeEventListener('mouseleave', cancel);
-				element.removeEventListener('touchstart', start);
-				element.removeEventListener('touchend', cancel);
-				element.removeEventListener('touchmove', cancel);
-				element.removeEventListener('touchcancel', cancel);
-				clearTimeout(timer);
-			};
 		};
 
-		return { start, cancel, check, attachTo };
+		return { check, attachTo };
 	};
 
 	const createElement = (tag, attrs = {}, children = []) => {
@@ -551,13 +474,13 @@ Format exactly as shown:
 		...modelParams,
 	});
 
-	const buildOverlayContent = (contentHTML, hasError = false) => {
+	const buildOverlayContent = (contentHTML, hasError = false, isLoading = false) => {
 		// Optimize: pre-allocate approximate string size and use single concatenation
 		let html = `<div class="summary-content-body">${contentHTML}</div>`;
 
 		if (hasError) {
 			html += `<div style="text-align:center;padding-bottom:24px"><button id="${CONFIG.ids.retryButton}" class="retry-button">Try Again</button></div>`;
-		} else if (!contentHTML.includes('glow')) {
+		} else if (!isLoading) {
 			// Add images section if available (optimized: use array join instead of string concatenation)
 			if (state.articleImages.length > 0) {
 				const galleryItems = [];
@@ -1021,7 +944,7 @@ Format exactly as shown:
 		item.dataset.service = service;
 
 		if (modelObj.id === state.activeModel) {
-			item.style.fontWeight = CONFIG.styles.fontWeights.activeModel;
+			item.style.fontWeight = 'normal';
 			item.style.color = CONFIG.styles.colors.activeModel;
 		}
 
@@ -1051,14 +974,14 @@ Format exactly as shown:
 		}
 	}
 
-	function showSummaryOverlay(contentHTML, isError = false) {
+	function showSummaryOverlay(contentHTML, isError = false, isLoading = false) {
 		if (dom.overlay) {
-			updateSummaryOverlay(contentHTML, isError);
+			updateSummaryOverlay(contentHTML, isError, isLoading);
 			return;
 		}
 
 		dom.overlay = createElement('div', { id: CONFIG.ids.overlay });
-		dom.overlay.innerHTML = `<div id="${CONFIG.ids.content}">${buildOverlayContent(contentHTML, isError)}</div>`;
+		dom.overlay.innerHTML = `<div id="${CONFIG.ids.content}">${buildOverlayContent(contentHTML, isError, isLoading)}</div>`;
 
 		document.body.appendChild(dom.overlay);
 		document.body.style.overflow = 'hidden';
@@ -1091,7 +1014,7 @@ Format exactly as shown:
 		}
 	}
 
-	function updateSummaryOverlay(contentHTML, isError = false) {
+	function updateSummaryOverlay(contentHTML, isError = false, isLoading = false) {
 		const contentDiv = document.getElementById(CONFIG.ids.content);
 		if (contentDiv) {
 			// Cleanup old event listeners before updating content
@@ -1100,7 +1023,7 @@ Format exactly as shown:
 				dom.overlayCleanup = null;
 			}
 
-			contentDiv.innerHTML = buildOverlayContent(contentHTML, isError);
+			contentDiv.innerHTML = buildOverlayContent(contentHTML, isError, isLoading);
 
 			// Reattach handlers with new cleanup function
 			dom.overlayCleanup = attachOverlayHandlers();
@@ -1158,35 +1081,37 @@ Format exactly as shown:
 		};
 	}
 
-	const _modelConfigCache = new Map();
-	const MAX_CACHE_SIZE = 50; // Prevent unbounded cache growth
-
 	function getActiveModelConfig() {
 		const activeId = state.activeModel;
-
-		if (_modelConfigCache.has(activeId)) {
-			return _modelConfigCache.get(activeId);
-		}
 
 		for (const serviceKey in CONFIG.modelGroups) {
 			const group = CONFIG.modelGroups[serviceKey];
 			const modelConfig = group.models.find(m => m.id === activeId);
 			if (modelConfig) {
-				const config = { ...modelConfig, service: serviceKey };
-
-				// Limit cache size to prevent memory leak
-				if (_modelConfigCache.size >= MAX_CACHE_SIZE) {
-					const firstKey = _modelConfigCache.keys().next().value;
-					_modelConfigCache.delete(firstKey);
-				}
-
-				_modelConfigCache.set(activeId, config);
-				return config;
+				return { ...modelConfig, service: serviceKey };
 			}
 		}
 
 		console.error(`Summarize with AI: Active model configuration not found for ID: ${activeId}`);
 		return null;
+	}
+
+	// Refreshes CONFIG.modelGroups[service]'s seed model to the auto-discovered latest one,
+	// and follows state.activeModel along if it was still pointing at that service's model.
+	async function syncLatestModel(service, activePrefix, resolver, apiKey) {
+		const latest = await resolver(apiKey);
+		if (!latest) return;
+
+		const currentEntry = CONFIG.modelGroups[service].models[0];
+		if (currentEntry.id === latest.id) return;
+
+		currentEntry.id = latest.id;
+		currentEntry.name = latest.name;
+		if (state.activeModel.startsWith(activePrefix)) {
+			state.activeModel = latest.id;
+			StorageService.setLastUsedModel(state.activeModel);
+		}
+		state.dropdownNeedsUpdate = true;
 	}
 
 	async function validateModelAndApiKey() {
@@ -1203,7 +1128,6 @@ Format exactly as shown:
 					: null;
 			if (fallbackService) {
 				state.activeModel = CONFIG.modelGroups[fallbackService].models[0].id;
-				_modelConfigCache.clear();
 				modelConfig = getActiveModelConfig();
 			}
 		}
@@ -1225,37 +1149,9 @@ Format exactly as shown:
 		}
 
 		if (service === 'claude') {
-			const latestSonnet = await resolveLatestSonnetModel(apiKey);
-			if (latestSonnet) {
-				const currentEntry = CONFIG.modelGroups.claude.models[0];
-				if (currentEntry.id !== latestSonnet.id) {
-					currentEntry.id = latestSonnet.id;
-					currentEntry.name = latestSonnet.name;
-					if (state.activeModel.startsWith('claude-sonnet')) {
-						state.activeModel = latestSonnet.id;
-						StorageService.setLastUsedModel(state.activeModel);
-					}
-					_modelConfigCache.clear();
-					state.dropdownNeedsUpdate = true;
-				}
-			}
-		}
-
-		if (service === 'gemini') {
-			const latestGemini = await resolveLatestGeminiModel(apiKey);
-			if (latestGemini) {
-				const currentEntry = CONFIG.modelGroups.gemini.models[0];
-				if (currentEntry.id !== latestGemini.id) {
-					currentEntry.id = latestGemini.id;
-					currentEntry.name = latestGemini.name;
-					if (state.activeModel.startsWith('gemini')) {
-						state.activeModel = latestGemini.id;
-						StorageService.setLastUsedModel(state.activeModel);
-					}
-					_modelConfigCache.clear();
-					state.dropdownNeedsUpdate = true;
-				}
-			}
+			await syncLatestModel('claude', 'claude-sonnet', resolveLatestSonnetModel, apiKey);
+		} else if (service === 'gemini') {
+			await syncLatestModel('gemini', 'gemini', resolveLatestGeminiModel, apiKey);
 		}
 
 		const finalModelConfig = getActiveModelConfig() ?? modelConfig;
@@ -1269,8 +1165,11 @@ Format exactly as shown:
 			// Hide the summary button during summarization
 			if (dom.button) dom.button.style.display = 'none';
 
-			const articleData = await getValidatedArticleData();
+			const articleData = state.articleData;
 			if (!articleData) {
+				showErrorNotification(
+					'Unable to extract article content. Please try selecting text manually.',
+				);
 				// Show button again if validation fails
 				if (dom.button) dom.button.style.display = 'flex';
 				return;
@@ -1309,19 +1208,6 @@ Format exactly as shown:
 		}
 	}
 
-	async function getValidatedArticleData() {
-		const articleData = state.articleData;
-
-		if (!articleData) {
-			showErrorNotification(
-				'Unable to extract article content. Please try selecting text manually.',
-			);
-			return null;
-		}
-
-		return articleData;
-	}
-
 	// Known-stable text model to fall back to if the auto-discovered "latest flash"
 	// model turns out to be a managed-agent/live variant requiring the Interactions API.
 	const GEMINI_SAFE_FALLBACK = { id: 'gemini-3.5-flash', name: 'Flash', service: 'gemini' };
@@ -1333,13 +1219,13 @@ Format exactly as shown:
 
 	// Providers occasionally return a transient 503 under high load; one short retry
 	// resolves most of these without bothering the user with a manual re-click.
-	async function sendApiRequestWithRetry(service, apiKey, payload, modelConfig) {
-		const response = await sendApiRequest(service, apiKey, payload, modelConfig);
+	async function sendApiRequestWithRetry(service, apiKey, prompt, modelConfig, maxTokens) {
+		const response = await sendApiRequest(service, apiKey, prompt, modelConfig, maxTokens);
 		if (response.status !== 503) return response;
 
 		console.warn(`Summarize with AI: [${modelConfig.id}] 503 (overloaded), retrying once in 3s`);
 		await new Promise(resolve => setTimeout(resolve, 3000));
-		return sendApiRequest(service, apiKey, payload, modelConfig);
+		return sendApiRequest(service, apiKey, prompt, modelConfig, maxTokens);
 	}
 
 	async function executeSummarization(articleData, validationResult) {
@@ -1355,13 +1241,10 @@ Format exactly as shown:
 		});
 		showLoadingState(modelDisplayName);
 
-		const payload = {
-			title: articleData.title,
-			content: articleData.content,
-		};
+		const prompt = PROMPT_TEMPLATE(articleData.title, articleData.content);
 
 		try {
-			const response = await sendApiRequestWithRetry(service, apiKey, payload, modelConfig);
+			const response = await sendApiRequestWithRetry(service, apiKey, prompt, modelConfig);
 			handleApiResponse(response);
 		} catch (error) {
 			const canFallBack =
@@ -1380,7 +1263,7 @@ Format exactly as shown:
 				const response = await sendApiRequestWithRetry(
 					service,
 					apiKey,
-					payload,
+					prompt,
 					GEMINI_SAFE_FALLBACK,
 				);
 				handleApiResponse(response);
@@ -1393,9 +1276,9 @@ Format exactly as shown:
 	function showLoadingState(modelDisplayName) {
 		const loadingMessage = `<p class="glow">Summarizing with ${modelDisplayName}... </p>`;
 		if (dom.overlay) {
-			updateSummaryOverlay(loadingMessage);
+			updateSummaryOverlay(loadingMessage, false, true);
 		} else {
-			showSummaryOverlay(loadingMessage);
+			showSummaryOverlay(loadingMessage, false, true);
 		}
 	}
 
@@ -1406,13 +1289,10 @@ Format exactly as shown:
 		UIHelpers.hideDropdown();
 	}
 
-	async function sendApiRequest(service, apiKey, payload, modelConfig, skipBuildBody = false) {
+	async function sendApiRequest(service, apiKey, prompt, modelConfig, maxTokens) {
 		const group = CONFIG.modelGroups[service];
 		let url = group.baseUrl;
-
-		// If skipBuildBody is true, use payload directly (for Q&A feature)
-		// Otherwise, build the request body from title/content (for summarization)
-		const requestBody = skipBuildBody ? payload : buildRequestBody(payload, modelConfig, service);
+		const requestBody = buildRequestBody(prompt, modelConfig, service, maxTokens);
 
 		// For Gemini, append model ID and API key to URL
 		if (service === 'gemini') {
@@ -1445,19 +1325,14 @@ Format exactly as shown:
 		});
 	}
 
-	function formatSonnetName(_modelId) {
-		return 'Sonnet';
-	}
-
-	function fetchLatestSonnetModel(apiKey) {
+	// Shared GET + status-check + JSON-parse for the two providers' "list models" endpoints;
+	// each provider still does its own candidate filtering/sorting on the returned data.
+	function fetchModelsList(url, headers = {}) {
 		return new Promise((resolve, reject) => {
 			GM.xmlHttpRequest({
 				method: 'GET',
-				url: 'https://api.anthropic.com/v1/models',
-				headers: {
-					'x-api-key': apiKey,
-					'anthropic-version': '2023-06-01',
-				},
+				url,
+				headers,
 				responseType: 'json',
 				timeout: 10000,
 				onload: response => {
@@ -1469,14 +1344,7 @@ Format exactly as shown:
 						reject(new Error(`Models API error: ${response.status}`));
 						return;
 					}
-					const sonnetModels = (data.data || [])
-						.filter(m => m.id?.startsWith('claude-sonnet'))
-						.sort((a, b) => b.id.localeCompare(a.id));
-					if (sonnetModels.length > 0) {
-						resolve(sonnetModels[0]);
-					} else {
-						reject(new Error('No Sonnet models found'));
-					}
+					resolve(data);
 				},
 				onerror: err =>
 					reject(new Error(`Network error: ${err.statusText || 'Failed to connect'}`)),
@@ -1485,90 +1353,83 @@ Format exactly as shown:
 		});
 	}
 
-	async function resolveLatestSonnetModel(apiKey) {
-		const CACHE_TTL = 24 * 60 * 60 * 1000;
-		try {
-			const cached = await StorageService.getLatestSonnetCache();
-			if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-				return { id: cached.modelId, name: formatSonnetName(cached.modelId) };
-			}
-			const model = await fetchLatestSonnetModel(apiKey);
-			await StorageService.setLatestSonnetCache(model.id);
-			return { id: model.id, name: formatSonnetName(model.id) };
-		} catch (err) {
-			console.warn(
-				'Summarize with AI: Could not fetch latest Sonnet model, using default:',
-				err.message,
-			);
-			return null;
-		}
-	}
-
-	function formatGeminiFlashName(_modelId) {
-		return 'Flash';
-	}
-
-	function fetchLatestGeminiFlashModel(apiKey) {
-		return new Promise((resolve, reject) => {
-			GM.xmlHttpRequest({
-				method: 'GET',
-				url: `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
-				responseType: 'json',
-				timeout: 10000,
-				onload: response => {
-					const data =
-						typeof response.response === 'object'
-							? response.response
-							: JSON.parse(response.responseText || '{}');
-					if (response.status < 200 || response.status >= 300) {
-						reject(new Error(`Models API error: ${response.status}`));
-						return;
-					}
-					// Exclude flash variants built for a different call shape (live/interactions,
-					// audio, image, tts, managed agents) even though they list generateContent support.
-					const NON_TEXT_VARIANT =
-						/live|audio|tts|image|native-audio|realtime|computer-use|agent|deep-research|antigravity|interaction/;
-					const flashModels = (data.models || [])
-						.filter(m => {
-							const id = m.name?.replace('models/', '');
-							return (
-								id?.includes('flash') &&
-								!NON_TEXT_VARIANT.test(id) &&
-								(m.supportedGenerationMethods || []).includes('generateContent')
-							);
-						})
-						.map(m => m.name.replace('models/', ''))
-						.sort((a, b) => b.localeCompare(a));
-					if (flashModels.length > 0) {
-						resolve(flashModels[0]);
-					} else {
-						reject(new Error('No Gemini Flash models found'));
-					}
-				},
-				onerror: err =>
-					reject(new Error(`Network error: ${err.statusText || 'Failed to connect'}`)),
-				ontimeout: () => reject(new Error('Models API request timed out')),
-			});
+	async function fetchLatestSonnetModel(apiKey) {
+		const data = await fetchModelsList('https://api.anthropic.com/v1/models', {
+			'x-api-key': apiKey,
+			'anthropic-version': '2023-06-01',
 		});
+		const sonnetModels = (data.data || [])
+			.filter(m => m.id?.startsWith('claude-sonnet'))
+			.sort((a, b) => b.id.localeCompare(a.id));
+		if (sonnetModels.length === 0) throw new Error('No Sonnet models found');
+		return sonnetModels[0].id;
 	}
 
-	async function resolveLatestGeminiModel(apiKey) {
-		const CACHE_TTL = 24 * 60 * 60 * 1000;
+	async function fetchLatestGeminiFlashModel(apiKey) {
+		const data = await fetchModelsList(
+			`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+		);
+		// Exclude flash variants built for a different call shape (live/interactions,
+		// audio, image, tts, managed agents) even though they list generateContent support.
+		const NON_TEXT_VARIANT =
+			/live|audio|tts|image|native-audio|realtime|computer-use|agent|deep-research|antigravity|interaction/;
+		const flashModels = (data.models || [])
+			.filter(m => {
+				const id = m.name?.replace('models/', '');
+				return (
+					id?.includes('flash') &&
+					!NON_TEXT_VARIANT.test(id) &&
+					(m.supportedGenerationMethods || []).includes('generateContent')
+				);
+			})
+			.map(m => m.name.replace('models/', ''))
+			.sort((a, b) => b.localeCompare(a));
+		if (flashModels.length === 0) throw new Error('No Gemini Flash models found');
+		return flashModels[0];
+	}
+
+	const MODEL_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+	// Shared cache-check -> fetch -> cache-store -> catch-and-warn-null flow for both providers'
+	// "latest model" resolution; only the cache accessors, fetcher, and display name differ.
+	async function resolveLatestModel(getCache, setCache, fetchModel, name, apiKey, label) {
 		try {
-			const cached = await StorageService.getLatestGeminiCache();
-			if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-				return { id: cached.modelId, name: formatGeminiFlashName(cached.modelId) };
+			const cached = await getCache();
+			if (cached && Date.now() - cached.timestamp < MODEL_CACHE_TTL) {
+				return { id: cached.modelId, name };
 			}
-			const modelId = await fetchLatestGeminiFlashModel(apiKey);
-			await StorageService.setLatestGeminiCache(modelId);
-			return { id: modelId, name: formatGeminiFlashName(modelId) };
+			const modelId = await fetchModel(apiKey);
+			await setCache(modelId);
+			return { id: modelId, name };
 		} catch (err) {
 			console.warn(
-				'Summarize with AI: Could not fetch latest Gemini model, using default:',
+				`Summarize with AI: Could not fetch latest ${label} model, using default:`,
 				err.message,
 			);
 			return null;
 		}
+	}
+
+	function resolveLatestSonnetModel(apiKey) {
+		return resolveLatestModel(
+			() => StorageService.getLatestSonnetCache(),
+			id => StorageService.setLatestSonnetCache(id),
+			fetchLatestSonnetModel,
+			'Sonnet',
+			apiKey,
+			'Sonnet',
+		);
+	}
+
+	function resolveLatestGeminiModel(apiKey) {
+		return resolveLatestModel(
+			() => StorageService.getLatestGeminiCache(),
+			id => StorageService.setLatestGeminiCache(id),
+			fetchLatestGeminiFlashModel,
+			'Flash',
+			apiKey,
+			'Gemini',
+		);
 	}
 
 	// Consolidated regex patterns at module level for better performance and maintainability
@@ -1692,9 +1553,12 @@ Format exactly as shown:
 		updateSummaryOverlay(cleanedSummary, false);
 	}
 
-	function buildRequestBody({ title, content }, modelConfig, service) {
-		const systemPrompt = PROMPT_TEMPLATE(title, content);
-
+	function buildRequestBody(
+		prompt,
+		modelConfig,
+		service,
+		maxTokens = CONFIG.limits.defaultMaxTokens,
+	) {
 		if (service === 'gemini') {
 			// Gemini API format - REST API requires structured content format
 			return {
@@ -1702,7 +1566,7 @@ Format exactly as shown:
 					{
 						parts: [
 							{
-								text: systemPrompt,
+								text: prompt,
 							},
 						],
 					},
@@ -1713,8 +1577,8 @@ Format exactly as shown:
 		// Claude API format (default)
 		return {
 			model: modelConfig.id,
-			messages: [{ role: 'user', content: systemPrompt }],
-			...mergeParams(CONFIG.modelGroups.claude.defaultParams, modelConfig.params),
+			messages: [{ role: 'user', content: prompt }],
+			max_tokens: maxTokens,
 		};
 	}
 
@@ -1737,7 +1601,7 @@ Format exactly as shown:
 	async function handleApiKeyReset(service) {
 		if (!service || !CONFIG.modelGroups[service]) {
 			console.error('Invalid service provided for API key reset:', service);
-			await NotificationService.invalidService();
+			await ModalService.alert('Invalid service provided.');
 			return;
 		}
 		const newApiKey = await ModalService.prompt(
@@ -1749,11 +1613,10 @@ Format exactly as shown:
 		if (newApiKey !== null) {
 			const trimmedApiKey = newApiKey.trim();
 			await StorageService.setApiKey(service, newApiKey);
-			if (trimmedApiKey) {
-				await NotificationService.apiKeyUpdated(service);
-			} else {
-				await NotificationService.apiKeyCleared(service);
-			}
+			const message = trimmedApiKey
+				? `${toTitleCase(service)} API key updated successfully.`
+				: `${toTitleCase(service)} API key has been cleared.`;
+			await ModalService.alert(message);
 		}
 	}
 
@@ -1899,46 +1762,12 @@ Question: ${question}
 
 Keep your answer under 150 words. Write in clear paragraphs. No section headers.`;
 
-			// Build payload based on service
-			let payload;
-			if (service === 'gemini') {
-				// Gemini API format
-				payload = {
-					contents: [
-						{
-							parts: [
-								{
-									text: prompt,
-								},
-							],
-						},
-					],
-				};
-			} else {
-				// Claude API format
-				payload = {
-					model: modelConfig.id,
-					messages: [{ role: 'user', content: prompt }],
-					max_tokens: 800,
-				};
-			}
-
-			const response = await sendApiRequest(service, apiKey, payload, modelConfig, true);
-
-			if (response.status < 200 || response.status >= 300) {
-				throw new Error(`[${modelConfig.id}] API Error (${response.status})`);
-			}
-
-			// Parse answer based on service
 			let answer;
-			if (service === 'gemini') {
-				// Gemini response format
-				const candidate = response.data?.candidates?.[0];
-				const part = candidate?.content?.parts?.[0];
-				answer = part?.text || 'No answer received';
-			} else {
-				// Claude response format
-				answer = response.data?.content?.[0]?.text || 'No answer received';
+			try {
+				const response = await sendApiRequest(service, apiKey, prompt, modelConfig, 800);
+				answer = extractSummaryFromResponse(response).rawSummary;
+			} catch (err) {
+				throw annotateModelError(err, modelConfig.id);
 			}
 
 			// Format the answer with proper HTML structure
