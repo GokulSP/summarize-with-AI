@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/Summarize-with-AI
-// @version     2026.07.07.05
+// @version     2026.07.24.01
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -1357,6 +1357,7 @@ Format exactly as shown:
 		const data = await fetchModelsList('https://api.anthropic.com/v1/models', {
 			'x-api-key': apiKey,
 			'anthropic-version': '2023-06-01',
+			'anthropic-dangerous-direct-browser-access': 'true',
 		});
 		const sonnetModels = (data.data || [])
 			.filter(m => m.id?.startsWith('claude-sonnet'))
@@ -1595,6 +1596,7 @@ Format exactly as shown:
 			'Content-Type': 'application/json',
 			'x-api-key': apiKey,
 			'anthropic-version': '2023-06-01',
+			'anthropic-dangerous-direct-browser-access': 'true',
 		};
 	}
 
