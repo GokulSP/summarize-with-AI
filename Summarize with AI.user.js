@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/Summarize-with-AI
-// @version     2026.07.24.01
+// @version     2026.07.24.02
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -1171,7 +1171,11 @@ Format exactly as shown:
 			// Hide the summary button during summarization
 			if (dom.button) dom.button.style.display = 'none';
 
-			const articleData = state.articleData;
+			// Re-extract on every click (not just at page load) so content revealed after
+			// load — e.g. clicking a "Transcript" tab — is picked up. Readability's own
+			// visibility filter drops hidden tab panels at parse time, so the load-time
+			// snapshot never contains a tab the user hadn't opened yet.
+			const articleData = getArticleData() ?? state.articleData;
 			if (!articleData) {
 				showErrorNotification(
 					'Unable to extract article content. Please try selecting text manually.',
