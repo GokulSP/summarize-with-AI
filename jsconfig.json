@@ -3,6 +3,7 @@
 		"checkJs": true,
 		"allowJs": true,
 		"noEmit": true,
-		"strict": false
+		"strict": false,
+		"types": ["tampermonkey"]
 	}
 }

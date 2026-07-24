@@ -571,7 +571,9 @@ Format exactly as shown:
 		if (questionInput) questionInput.addEventListener('keypress', handlers.keypress);
 
 		// Optimize: Use event delegation instead of attaching handlers to each item
-		const imageGallery = contentElement.querySelector('.image-gallery');
+		const imageGallery = /** @type {HTMLElement | null} */ (
+			contentElement.querySelector('.image-gallery')
+		);
 		if (imageGallery && !imageGallery.dataset.hasListener) {
 			imageGallery.dataset.hasListener = 'true';
 			imageGallery.addEventListener('click', handlers.galleryClick);
@@ -614,7 +616,7 @@ Format exactly as shown:
 
 	function getArticleData() {
 		try {
-			const documentClone = document.cloneNode(true);
+			const documentClone = /** @type {Document} */ (document.cloneNode(true));
 			const nonContentElements = documentClone.querySelectorAll(
 				'script, style, noscript, iframe, figure, img, svg, header, footer, nav',
 			);
@@ -720,7 +722,9 @@ Format exactly as shown:
 			// STEP 1: Extract interactive visualizations FIRST (highest priority)
 			const iframeSelector =
 				'article iframe, main iframe, [role="main"] iframe, .article-content iframe, .post-content iframe, .entry-content iframe';
-			const iframes = document.querySelectorAll(iframeSelector);
+			const iframes = /** @type {NodeListOf<HTMLIFrameElement>} */ (
+				document.querySelectorAll(iframeSelector)
+			);
 
 			for (const iframe of iframes) {
 				if (images.length >= maxImages) break;
@@ -754,7 +758,9 @@ Format exactly as shown:
 			if (images.length < maxImages) {
 				const combinedSelector =
 					'article img, main img, [role="main"] img, .article-content img, .post-content img, .entry-content img, figure img, picture img';
-				const imgs = document.querySelectorAll(combinedSelector);
+				const imgs = /** @type {NodeListOf<HTMLImageElement>} */ (
+					document.querySelectorAll(combinedSelector)
+				);
 
 				for (const img of imgs) {
 					if (images.length >= maxImages) break;
@@ -2105,9 +2111,10 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		let focusOutTimer = null;
 
 		document.addEventListener('focusin', event => {
+			const target = /** @type {Element | null} */ (event.target);
 			// Exclude modal inputs from hiding the button
-			const isModalInput = event.target?.closest('.custom-modal-overlay');
-			if (event.target?.closest(CONFIG.selectors.input) && !isModalInput) {
+			const isModalInput = target?.closest('.custom-modal-overlay');
+			if (target?.closest(CONFIG.selectors.input) && !isModalInput) {
 				if (focusOutTimer) {
 					clearTimeout(focusOutTimer);
 					focusOutTimer = null;
@@ -2120,10 +2127,12 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		document.addEventListener(
 			'focusout',
 			event => {
+				const target = /** @type {Element | null} */ (event.target);
+				const relatedTarget = /** @type {Element | null} */ (event.relatedTarget);
 				// Exclude modal inputs from the restore logic
-				const isModalInput = event.target?.closest('.custom-modal-overlay');
-				const isLeavingInput = event.target?.closest(CONFIG.selectors.input) && !isModalInput;
-				const isEnteringInput = event.relatedTarget?.closest(CONFIG.selectors.input);
+				const isModalInput = target?.closest('.custom-modal-overlay');
+				const isLeavingInput = target?.closest(CONFIG.selectors.input) && !isModalInput;
+				const isEnteringInput = relatedTarget?.closest(CONFIG.selectors.input);
 
 				if (isLeavingInput && !isEnteringInput && state.articleData) {
 					focusOutTimer = setTimeout(() => {
