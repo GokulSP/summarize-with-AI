@@ -4,9 +4,9 @@
 	"description": "Personal userscript fork: single-button AI article summarization (Claude & Gemini) with image galleries, Q&A, and a Dieter Rams-inspired UI.",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/GokulSP/Summarize-with-AI.git"
+		"url": "git+https://github.com/GokulSP/summarize-with-AI.git"
 	},
-	"homepage": "https://gokulsp.github.io/Summarize-with-AI/",
+	"homepage": "https://gokulsp.github.io/summarize-with-AI/",
 	"author": "Gokul SP",
 	"license": "WTFPL",
 	"type": "module",
