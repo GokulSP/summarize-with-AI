@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/summarize-with-AI
-// @version     2026.08.25.04
+// @version     2026.08.25.05
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -105,7 +105,7 @@ Tags: <p>, <ul>, <li>, <strong> only
 <content>${content}</content>
 </article>
 
-Summarize this article accurately and concisely.
+Summarize this article accurately and concisely. Ground key points in the article's concrete facts, figures, and statistics rather than vague generalities.
 
 Format exactly as shown:
 
@@ -114,14 +114,14 @@ Format exactly as shown:
 
 <p><strong>Key Points:</strong></p>
 <ul>
-<li>Most important point (max ${CONFIG.limits.bulletPointMaxWords} words)</li>
-<li>Second key point (max ${CONFIG.limits.bulletPointMaxWords} words)</li>
-<li>Third key point (max ${CONFIG.limits.bulletPointMaxWords} words)</li>
-<li>Fourth key point (max ${CONFIG.limits.bulletPointMaxWords} words)</li>
+<li>Most important point, citing specific data/figures where the article provides them (max ${CONFIG.limits.bulletPointMaxWords} words)</li>
+<li>Second key point, citing specific data/figures where the article provides them (max ${CONFIG.limits.bulletPointMaxWords} words)</li>
+<li>Third key point, citing specific data/figures where the article provides them (max ${CONFIG.limits.bulletPointMaxWords} words)</li>
+<li>Fourth key point, citing specific data/figures where the article provides them (max ${CONFIG.limits.bulletPointMaxWords} words)</li>
 </ul>
 
 <p><strong>Significance:</strong></p>
-<p>Real-world impact, practical application, or broader implications in 1-2 sentences.</p>
+<p>Real-world impact, practical application, or broader implications in 1-2 sentences. If the article uses a notable analogy or illustrative example, work it in here to make the point memorable; omit if none.</p>
 
 <p><strong>Context:</strong></p>
 <p>Relevant background, historical perspective, or setting in 1-2 sentences.</p>
@@ -1456,6 +1456,8 @@ Format exactly as shown:
 	const REGEX_PATTERNS = {
 		// Summary cleaning patterns
 		cleanSummary: {
+			codeFenceOpen: /^```[a-zA-Z]*\s*/,
+			codeFenceClose: /\s*```$/,
 			newlines: /\n/g,
 			multiSpaces: / {2,}/g,
 			styleAttr: / style="[^"]*"/gi,
@@ -1476,6 +1478,9 @@ Format exactly as shown:
 		// Use cached regex for all replacements
 		const { cleanSummary } = REGEX_PATTERNS;
 		const cleaned = htmlString
+			.trim()
+			.replace(cleanSummary.codeFenceOpen, '')
+			.replace(cleanSummary.codeFenceClose, '')
 			.replace(cleanSummary.newlines, ' ')
 			.replace(cleanSummary.multiSpaces, ' ')
 			.trim()

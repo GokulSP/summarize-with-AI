@@ -52,6 +52,18 @@ describe('cleanSummaryHTML', () => {
 		const input = '<font color="red" size="3">Hello</font>  World\n\nTest';
 		expect(helpers.cleanSummaryHTML(input)).toBe('<span>Hello</span> World Test');
 	});
+
+	it('strips a markdown code fence some models wrap the response in', () => {
+		const input = '```html\n<p><strong>Core Insight:</strong></p>\n<p>Summary text.</p>\n```';
+		expect(helpers.cleanSummaryHTML(input)).toBe(
+			'<p><strong>Core Insight:</strong></p> <p>Summary text.</p>',
+		);
+	});
+
+	it('strips a bare code fence with no language tag', () => {
+		const input = '```\n<p>Summary text.</p>\n```';
+		expect(helpers.cleanSummaryHTML(input)).toBe('<p>Summary text.</p>');
+	});
 });
 
 describe('formatQAAnswer', () => {
