@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/summarize-with-AI
-// @version     2026.08.25.03
+// @version     2026.08.25.04
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -808,10 +808,14 @@ Format exactly as shown:
 						}
 					}
 
-					// Combined size filters (with exemption for Economist charts)
+					// McKinsey exhibit charts are vector SVGs (often gzipped .svgz) with no
+					// intrinsic raster size, so naturalWidth/naturalHeight report 0
+					const isMcKinseySvgChart = isMcKinsey && (src.includes('.svgz') || src.includes('.svg'));
+
+					// Combined size filters (with exemptions for Economist/McKinsey charts)
 					if (width < 300 || height < 300) {
 						// Allow Economist charts even if small (they're often 360px wide)
-						if (isEconomist && isEconomistChart) {
+						if ((isEconomist && isEconomistChart) || isMcKinseySvgChart) {
 							// Chart exemption - continue to add the image
 						} else {
 							continue;
