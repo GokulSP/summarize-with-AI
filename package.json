@@ -10,7 +10,7 @@
 	"author": "Gokul SP",
 	"license": "WTFPL",
 	"type": "module",
-	"packageManager": "pnpm@11.9.0+sha512.bd682d5d03fe525ef7c9fd6780c6884d1e756ac4c9c9fe00c538782824310dcf90e3ddc4f53835f06dfaebd5085e41855e0bcbb3b60de2ac5bbab89e5036f03b",
+	"packageManager": "pnpm@11.23.0+sha512.f00082e5b283a199b74e079da28d155c008fe232f44c8a06ea7ddfa014ecf719fc362f790ecc67b28106ddac2afb24c49a9a079159da560b2ce7d1e98efd11af",
 	"devDependencies": {
 		"@biomejs/biome": "2.3.10",
 		"@types/tampermonkey": "^5.0.5",
