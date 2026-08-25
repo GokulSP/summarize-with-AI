@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/summarize-with-AI
-// @version     2026.08.25.02
+// @version     2026.08.25.03
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -9,8 +9,6 @@
 // @license     WTFPL
 // @match       https://hbr.org/*
 // @match       https://www.economist.com/*
-// @match       https://www.bloomberg.com/*
-// @match       https://www.abc.net.au/*
 // @match       https://www.mckinsey.com/*
 // @grant       GM.addStyle
 // @grant       GM.xmlHttpRequest

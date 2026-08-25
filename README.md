@@ -10,7 +10,7 @@ A userscript that summarizes articles with Claude or Gemini in one click, with a
 - Follow-up Q&A about the article, answered by the same model
 - One-click copy of the formatted summary
 - Dark mode, mobile-optimized, custom modals instead of browser dialogs
-- Supported sites: Harvard Business Review, The Economist, Bloomberg, ABC News Australia, McKinsey & Company
+- Supported sites: Harvard Business Review, The Economist, McKinsey & Company
 
 ## Installation
 
