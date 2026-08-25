@@ -1,6 +1,6 @@
 {
 	"name": "summarize-with-ai",
-	"version": "2026.08.25.06",
+	"version": "2026.08.25.07",
 	"description": "Personal userscript fork: single-button AI article summarization (Claude & Gemini) with image galleries, Q&A, and a Dieter Rams-inspired UI.",
 	"repository": {
 		"type": "git",

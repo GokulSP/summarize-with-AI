@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/summarize-with-AI
-// @version     2026.08.25.06
+// @version     2026.08.25.07
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -1833,6 +1833,32 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
 	// --- Image Lightbox Functions ---
 	let currentImageIndex = 0;
+	let lightboxZoom = { scale: 1, x: 0, y: 0 };
+
+	function clampZoomScale(scale) {
+		return Math.min(Math.max(scale, 1), 4);
+	}
+
+	function applyLightboxZoomTransform() {
+		const img = dom.lightboxElements?.img;
+		if (!img) return;
+		img.style.transform = `translate(${lightboxZoom.x}px, ${lightboxZoom.y}px) scale(${lightboxZoom.scale})`;
+		img.style.cursor = lightboxZoom.scale > 1 ? 'grab' : 'zoom-in';
+	}
+
+	function resetLightboxZoom() {
+		lightboxZoom = { scale: 1, x: 0, y: 0 };
+		applyLightboxZoomTransform();
+	}
+
+	function toggleLightboxZoom() {
+		if (lightboxZoom.scale > 1) {
+			resetLightboxZoom();
+		} else {
+			lightboxZoom = { scale: 2.5, x: 0, y: 0 };
+			applyLightboxZoomTransform();
+		}
+	}
 
 	function openLightbox(index) {
 		if (!state.articleImages.length) return;
@@ -1841,18 +1867,6 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
 		if (!dom.lightbox) {
 			createLightbox();
-		} else if (!dom.lightboxElements) {
-			// Re-cache elements if they were cleared
-			dom.lightboxElements = {
-				img: dom.lightbox.querySelector('.lightbox-image'),
-				iframe: dom.lightbox.querySelector('.lightbox-iframe'),
-				counter: dom.lightbox.querySelector('.lightbox-counter'),
-				prevBtn: dom.lightbox.querySelector('.lightbox-prev'),
-				nextBtn: dom.lightbox.querySelector('.lightbox-next'),
-				thumbnailStrip: dom.lightbox.querySelector('.lightbox-thumbnails'),
-				shareBtn: dom.lightbox.querySelector('.lightbox-share'),
-			};
-			renderThumbnails();
 		}
 
 		updateLightboxImage();
@@ -1862,7 +1876,6 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
 	function closeLightbox() {
 		if (dom.lightbox) {
-			dom.lightbox.style.display = 'none';
 			document.body.style.overflow = '';
 
 			// Cleanup event listeners to prevent memory leaks
@@ -1871,7 +1884,12 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 				dom.lightboxCleanup = null;
 			}
 
-			// Clear cached elements
+			// Remove the lightbox entirely so the next openLightbox() rebuilds it via
+			// createLightbox(), re-attaching the wheel/drag/pinch/touch listeners that
+			// dom.lightboxCleanup() just tore down (a stale-but-visible node would skip
+			// createLightbox() and leave those listeners missing on the next open).
+			dom.lightbox.remove();
+			dom.lightbox = null;
 			dom.lightboxElements = null;
 		}
 	}
@@ -1889,6 +1907,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		const img = createElement('img', {
 			className: 'lightbox-image',
 			alt: 'Full size image',
+			title: 'Scroll or pinch to zoom, drag to pan, double-click/tap to reset',
 		});
 
 		const iframe = createElement('iframe', {
@@ -1968,19 +1987,79 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		// Keyboard navigation
 		document.addEventListener('keydown', handleLightboxKeyboard);
 
-		// Touch/swipe support
+		// Touch/swipe/pan/pinch-zoom support
 		let touchStartX = 0;
+		let touchStartY = 0;
 		let touchEndX = 0;
+		let pinchStartDistance = 0;
+		let pinchStartScale = 1;
+		let panOrigin = { x: 0, y: 0 };
+		let panStart = { x: 0, y: 0 };
+		let isPanning = false;
+		let isPinching = false;
+		let lastTapTime = 0;
+
+		const getTouchDistance = touches =>
+			Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
 
 		const touchStartHandler = e => {
-			touchStartX = e.changedTouches[0].screenX;
+			if (e.touches.length === 2) {
+				isPinching = true;
+				pinchStartDistance = getTouchDistance(e.touches);
+				pinchStartScale = lightboxZoom.scale;
+			} else if (e.touches.length === 1) {
+				touchStartX = e.touches[0].screenX;
+				touchStartY = e.touches[0].screenY;
+				if (lightboxZoom.scale > 1) {
+					isPanning = true;
+					panOrigin = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+					panStart = { x: lightboxZoom.x, y: lightboxZoom.y };
+				}
+			}
 		};
+
+		const touchMoveHandler = e => {
+			if (isPinching && e.touches.length === 2) {
+				e.preventDefault();
+				const distance = getTouchDistance(e.touches);
+				lightboxZoom.scale = clampZoomScale(pinchStartScale * (distance / pinchStartDistance));
+				applyLightboxZoomTransform();
+			} else if (isPanning && e.touches.length === 1) {
+				e.preventDefault();
+				lightboxZoom.x = panStart.x + (e.touches[0].clientX - panOrigin.x);
+				lightboxZoom.y = panStart.y + (e.touches[0].clientY - panOrigin.y);
+				applyLightboxZoomTransform();
+			}
+		};
+
 		const touchEndHandler = e => {
-			touchEndX = e.changedTouches[0].screenX;
-			handleSwipe();
+			if (e.touches.length > 0) return;
+
+			const wasPinchOrPan = isPinching || isPanning;
+			isPinching = false;
+			isPanning = false;
+			if (wasPinchOrPan) return;
+
+			const touch = e.changedTouches[0];
+			touchEndX = touch.screenX;
+			const movedDistance = Math.hypot(touch.screenX - touchStartX, touch.screenY - touchStartY);
+
+			if (movedDistance < 10) {
+				// Tap - check for double-tap to toggle zoom
+				const now = Date.now();
+				if (now - lastTapTime < 300) {
+					toggleLightboxZoom();
+					lastTapTime = 0;
+				} else {
+					lastTapTime = now;
+				}
+			} else if (lightboxZoom.scale <= 1) {
+				handleSwipe();
+			}
 		};
 
 		lightboxContent.addEventListener('touchstart', touchStartHandler, { passive: true });
+		lightboxContent.addEventListener('touchmove', touchMoveHandler, { passive: false });
 		lightboxContent.addEventListener('touchend', touchEndHandler, { passive: true });
 
 		function handleSwipe() {
@@ -1992,17 +2071,68 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			}
 		}
 
+		// Desktop zoom: wheel to zoom, drag to pan, double-click to toggle
+		const wheelHandler = e => {
+			e.preventDefault();
+			const delta = e.deltaY < 0 ? 0.25 : -0.25;
+			lightboxZoom.scale = clampZoomScale(lightboxZoom.scale + delta);
+			if (lightboxZoom.scale === 1) {
+				lightboxZoom.x = 0;
+				lightboxZoom.y = 0;
+			}
+			applyLightboxZoomTransform();
+		};
+
+		const dblClickHandler = () => toggleLightboxZoom();
+
+		let isDragging = false;
+		let dragStart = { x: 0, y: 0 };
+		let dragPanStart = { x: 0, y: 0 };
+
+		const mouseDownHandler = e => {
+			if (lightboxZoom.scale <= 1) return;
+			isDragging = true;
+			dragStart = { x: e.clientX, y: e.clientY };
+			dragPanStart = { x: lightboxZoom.x, y: lightboxZoom.y };
+			img.style.cursor = 'grabbing';
+			e.preventDefault();
+		};
+		const mouseMoveHandler = e => {
+			if (!isDragging) return;
+			lightboxZoom.x = dragPanStart.x + (e.clientX - dragStart.x);
+			lightboxZoom.y = dragPanStart.y + (e.clientY - dragStart.y);
+			applyLightboxZoomTransform();
+		};
+		const mouseUpHandler = () => {
+			isDragging = false;
+			applyLightboxZoomTransform();
+		};
+
+		img.addEventListener('wheel', wheelHandler, { passive: false });
+		img.addEventListener('dblclick', dblClickHandler);
+		img.addEventListener('mousedown', mouseDownHandler);
+		window.addEventListener('mousemove', mouseMoveHandler);
+		window.addEventListener('mouseup', mouseUpHandler);
+
 		// Store cleanup function to remove all event listeners
 		dom.lightboxCleanup = () => {
 			document.removeEventListener('keydown', handleLightboxKeyboard);
 			dom.lightbox.removeEventListener('click', overlayClickHandler);
 			lightboxContent.removeEventListener('touchstart', touchStartHandler);
+			lightboxContent.removeEventListener('touchmove', touchMoveHandler);
 			lightboxContent.removeEventListener('touchend', touchEndHandler);
+			img.removeEventListener('wheel', wheelHandler);
+			img.removeEventListener('dblclick', dblClickHandler);
+			img.removeEventListener('mousedown', mouseDownHandler);
+			window.removeEventListener('mousemove', mouseMoveHandler);
+			window.removeEventListener('mouseup', mouseUpHandler);
 		};
 	}
 
 	function updateLightboxImage() {
 		if (!dom.lightbox || !dom.lightboxElements || !state.articleImages.length) return;
+
+		resetLightboxZoom();
 
 		const { img, iframe, counter, prevBtn, nextBtn, thumbnailStrip } = dom.lightboxElements;
 		const currentItem = state.articleImages[currentImageIndex];
@@ -2831,6 +2961,12 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         object-fit: cover;
         display: block;
       }
+      /* Exhibit-chart SVGs are designed for a white canvas — force it regardless of
+         dark/light mode so chart text stays legible, and avoid cropping chart labels. */
+      .gallery-item img[src*=".svg"] {
+        background: #fff;
+        object-fit: contain;
+      }
       .gallery-item-iframe {
         display: flex;
         align-items: center;
@@ -2925,6 +3061,11 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         object-fit: contain;
         user-select: none;
         -webkit-user-select: none;
+        touch-action: none;
+        cursor: zoom-in;
+      }
+      .lightbox-image[src*=".svg"] {
+        background: #fff;
       }
       .lightbox-iframe {
         width: 90vw;
@@ -2984,6 +3125,10 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         height: 100%;
         object-fit: cover;
         display: block;
+      }
+      .lightbox-thumbnail-img[src*=".svg"] {
+        background: #fff;
+        object-fit: contain;
       }
       .lightbox-thumbnail-iframe-indicator {
         width: 100%;
