@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/summarize-with-AI
-// @version     2026.08.25.05
+// @version     2026.08.25.06
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -757,7 +757,7 @@ Format exactly as shown:
 			// STEP 2: Extract regular images (only if space available after iframes)
 			if (images.length < maxImages) {
 				const combinedSelector =
-					'article img, main img, [role="main"] img, .article-content img, .post-content img, .entry-content img, figure img, picture img';
+					'article img, main img, [role="main"] img, .article-content img, .post-content img, .entry-content img';
 				const imgs = /** @type {NodeListOf<HTMLImageElement>} */ (
 					document.querySelectorAll(combinedSelector)
 				);
@@ -770,11 +770,14 @@ Format exactly as shown:
 
 					// Combine Economist filters in single check
 					if (isEconomist) {
-						const hasPromotionalClass =
-							img.parentElement?.parentElement?.className?.includes('e1kb1ha80');
+						const hasPromotionalClass = img.closest('[class*="e1kb1ha80"]') !== null;
 						const isHeaderImage = src.includes('_DE_');
+						// "More from"/related-article teaser cards use CSS-module classes like
+						// teaser_mb-teaser__k_8Tk and media_mb-teaser__media__JtjA2 — the hashed
+						// suffix changes per Economist deploy, but the mb-teaser token is stable.
+						const isTeaserImage = img.closest('[class*="mb-teaser"]') !== null;
 
-						if (hasPromotionalClass || isHeaderImage) {
+						if (hasPromotionalClass || isHeaderImage || isTeaserImage) {
 							continue;
 						}
 					}
@@ -2580,6 +2583,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
       #${CONFIG.ids.content} button,
       #${CONFIG.ids.content} input {
         font-family: ${fontFamily};
+        font-weight: var(--font-weight-normal);
       }
       #${CONFIG.ids.content} p {
         margin-top: 0;
