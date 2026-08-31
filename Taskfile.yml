@@ -1,0 +1,39 @@
+version: "3"
+
+tasks:
+  lint:
+    deps: [lint:js, lint:md]
+  lint:js:
+    cmds:
+      - pnpm exec biome check --write {{.CLI_ARGS}}
+  lint:md:
+    cmds:
+      - pnpm exec markdownlint-cli2 --fix {{.CLI_ARGS}}
+
+  typecheck:
+    deps: [typecheck:js]
+  typecheck:js:
+    cmds:
+      - pnpm exec tsc -p jsconfig.json
+
+  test:
+    deps: [test:js]
+  test:js:
+    cmds:
+      - pnpm exec vitest run
+
+  audit:js:
+    cmds:
+      - pnpm audit
+
+  check:lockfile-js:
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  check:commit-msg:
+    cmds:
+      - uvx gitfluff lint {{.CLI_ARGS}} --write
+
+  sync:metadata:
+    cmds:
+      - node scripts/sync-metadata.js

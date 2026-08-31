@@ -1,18 +1,25 @@
 pre-commit:
   commands:
-    biome:
+    lint-js:
       glob: "*.{js,json}"
-      run: pnpm exec biome check --write {staged_files}
+      run: task lint:js -- {staged_files}
       stage_fixed: true
-    markdownlint:
+    lint-md:
       glob: "*.md"
-      run: pnpm exec markdownlint-cli2 --fix {staged_files}
+      run: task lint:md -- {staged_files}
       stage_fixed: true
     metadata:
       glob: "Summarize with AI.user.js"
-      run: node scripts/sync-metadata.js
+      run: task sync:metadata
+
+commit-msg:
+  commands:
+    conventional:
+      run: task check:commit-msg -- {1}
 
 pre-push:
   commands:
-    check-lockfile:
-      run: pnpm install --frozen-lockfile
+    check-lockfile-js:
+      run: task check:lockfile-js
+    audit-js:
+      run: task audit:js
