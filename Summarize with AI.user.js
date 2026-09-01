@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/summarize-with-AI
-// @version     2026.08.25.08
+// @version     2026.09.01.01
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -2354,8 +2354,8 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         --space-xl: 40px;
 
         /* Typography Scale */
-        --font-size-sm: 0.875rem;   /* 14px */
-        --font-size-base: 1rem;      /* 16px */
+        --font-size-sm: 14px;
+        --font-size-base: 16px;
         --font-weight-normal: 400;
         --font-weight-semibold: 600;
         --line-height-normal: 1.6;
@@ -2596,7 +2596,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         width: 56px; height: 56px;
         background: #1A73E8;
         color: #ffffff;
-        font-size: 1rem; font-weight: var(--font-weight-normal);
+        font-size: 16px; font-weight: var(--font-weight-normal);
         font-family: ${fontFamily};
         border-radius: 50%; cursor: pointer; z-index: var(--z-button);
         box-shadow: var(--shadow-button);
@@ -2681,7 +2681,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         background: transparent;
         border: 1px solid var(--color-border);
         font-family: ${fontFamily};
-        font-size: 0.95rem;
+        font-size: 15px;
         font-weight: var(--font-weight-normal);
         color: var(--color-text-secondary);
         cursor: pointer;
@@ -2717,31 +2717,34 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
       #${CONFIG.ids.content} strong,
       #${CONFIG.ids.content} button,
       #${CONFIG.ids.content} input {
-        font-family: ${fontFamily};
-        font-weight: var(--font-weight-normal);
+        font-family: ${fontFamily} !important;
+        font-weight: var(--font-weight-normal) !important;
       }
       #${CONFIG.ids.content} p {
         margin-top: 0;
         margin-bottom: 1.2em;
         color: inherit;
         max-width: 65ch;
-        line-height: 1.5;
+        font-size: 16px !important;
+        line-height: 1.5 !important;
       }
       #${CONFIG.ids.content} ul {
         margin: 0 0 1.2em 0;
         padding-left: 1.5em;
         color: inherit;
+        font-size: 16px !important;
       }
       #${CONFIG.ids.content} li {
         list-style-type: disc;
         margin-bottom: 0.6em;
         color: inherit;
-        line-height: 1.5;
+        font-size: 16px !important;
+        line-height: 1.5 !important;
       }
       #${CONFIG.ids.content} strong {
-        font-weight: var(--font-weight-semibold);
+        font-weight: var(--font-weight-semibold) !important;
         color: var(--color-text-primary);
-        font-size: 1em;
+        font-size: 1em !important;
         letter-spacing: -0.005em;
       }
       #${CONFIG.ids.content} span:not([class*="article-"]) {
@@ -2776,7 +2779,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
       .error-message {
         flex: 1;
-        font-size: 0.95rem;
+        font-size: 15px;
         line-height: 1.5;
         color: var(--color-text-primary);
         margin: 0;
@@ -2786,7 +2789,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         background: transparent;
         border: none;
         color: var(--color-text-secondary);
-        font-size: 1.5rem;
+        font-size: 24px;
         line-height: 1;
         cursor: pointer;
         padding: 0;
@@ -2845,7 +2848,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         font-weight: var(--font-weight-normal);
         color: var(--color-text-primary);
         margin-bottom: 12px;
-        font-size: 0.95rem;
+        font-size: 15px;
       }
       .question-input-wrapper {
         display: flex;
@@ -2858,7 +2861,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         border: 1px solid var(--color-border);
         border-radius: var(--radius-sm);
         font-family: ${fontFamily};
-        font-size: 0.95rem;
+        font-size: 15px;
         transition: border-color var(--transition-fast);
         background: var(--color-bg-primary);
         color: var(--color-text-primary);
@@ -2882,7 +2885,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         border-radius: var(--radius-sm);
         cursor: pointer;
         font-family: ${fontFamily};
-        font-size: 0.95rem;
+        font-size: 15px;
         font-weight: var(--font-weight-normal);
         transition: all var(--transition-fast);
         white-space: nowrap;
@@ -3244,19 +3247,19 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
          .modal-message {
            padding: 24px 24px 20px 24px;
-           font-size: 0.95rem;
+           font-size: 15px;
          }
 
          .modal-input {
            margin: 0 24px 20px 24px;
            width: calc(100% - 48px);
            padding: 12px 14px;
-           font-size: 0.95rem;
+           font-size: 15px;
          }
 
          .modal-button {
            padding: 14px;
-           font-size: 0.95rem;
+           font-size: 15px;
          }
 
          /* Error Notification Mobile */
@@ -3275,13 +3278,13 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
          }
 
          .error-message {
-           font-size: 0.9rem;
+           font-size: 14px;
          }
 
          .error-close {
            width: 20px;
            height: 20px;
-           font-size: 1.3rem;
+           font-size: 21px;
          }
 
          #${CONFIG.ids.content} {
@@ -3301,7 +3304,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
             z-index: 11;
          }
          .menubar-button {
-            font-size: 0.9rem;
+            font-size: 14px;
             padding: 6px 10px;
          }
          .summary-content-body {
@@ -3311,18 +3314,18 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
             padding: 20px 16px;
          }
          .question-header {
-            font-size: 0.9rem;
+            font-size: 14px;
          }
          .question-input-wrapper {
             flex-direction: column;
             gap: 8px;
          }
          .question-input {
-            font-size: 0.9rem;
+            font-size: 14px;
          }
          .ask-button {
             width: 100%;
-            font-size: 0.9rem;
+            font-size: 14px;
          }
          .image-gallery {
             padding: 20px 16px;
@@ -3340,11 +3343,11 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
             gap: 8px;
          }
          .lightbox-menubar .menubar-button {
-            font-size: 0.9rem;
+            font-size: 14px;
             padding: 4px 6px;
          }
          .lightbox-counter {
-            font-size: 0.9rem;
+            font-size: 14px;
             padding: 4px 8px;
          }
          .lightbox-content {
