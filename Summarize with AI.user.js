@@ -97,6 +97,18 @@
 		},
 	};
 
+	/** @typedef {{ title: string, content: string }} ArticleData */
+	/** @typedef {{ src: string, alt: string, width: number, height: number, type: 'image' | 'iframe', priority: number }} ImageItem */
+	/** @typedef {{ id: string, name: string }} ModelEntry */
+	/** @typedef {keyof typeof CONFIG.modelGroups} Service */
+	/** @typedef {ModelEntry & { service: Service }} ModelConfig */
+	/** @typedef {{ modelConfig: ModelConfig, apiKey: string, service: Service, modelDisplayName: string }} ValidationResult */
+	/** @typedef {{ title: string, content: string, timestamp: string }} Summary */
+	/** @typedef {{ status: number, data: any, statusText?: string, service: Service }} ApiResponse */
+	/** @typedef {{ closeBtn: HTMLButtonElement | null, retryBtn: HTMLButtonElement | null, askBtn: HTMLButtonElement | null, questionInput: HTMLInputElement | null, answerContainer: HTMLElement | null, imageGallery: HTMLElement | null }} OverlayElements */
+	/** @typedef {{ img: HTMLImageElement, iframe: HTMLIFrameElement, counter: HTMLElement, prevBtn: HTMLButtonElement, nextBtn: HTMLButtonElement, thumbnailStrip: HTMLElement }} LightboxElements */
+
+	/** @param {string} title @param {string} content */
 	const PROMPT_TEMPLATE = (title, content) => `Target: ~${CONFIG.limits.targetWordCount} words
 Tags: <p>, <ul>, <li>, <strong> only
 
@@ -135,13 +147,16 @@ Format exactly as shown:
 			LAST_USED_MODEL: 'last_used_model',
 			SONNET_CACHE: 'latest_sonnet_cache',
 			GEMINI_CACHE: 'latest_gemini_cache',
+			/** @param {string} service */
 			API_KEY: service => `${service}_api_key`,
 		},
 
+		/** @param {string} defaultModel */
 		async getLastUsedModel(defaultModel) {
 			return await GM.getValue(this.keys.LAST_USED_MODEL, defaultModel);
 		},
 
+		/** @param {string} modelId */
 		async setLastUsedModel(modelId) {
 			if (!modelId) {
 				console.warn('StorageService: Cannot save empty model ID');
@@ -150,15 +165,19 @@ Format exactly as shown:
 			return await GM.setValue(this.keys.LAST_USED_MODEL, modelId);
 		},
 
+		/** @param {string} service */
 		async getApiKey(service) {
 			if (!service) {
 				console.error('StorageService: Service parameter is required');
 				return null;
 			}
-			const apiKey = await GM.getValue(this.keys.API_KEY(service));
+			const apiKey = /** @type {string | undefined} */ (
+				await GM.getValue(this.keys.API_KEY(service))
+			);
 			return apiKey?.trim() || null;
 		},
 
+		/** @param {string} service @param {string} apiKey */
 		async setApiKey(service, apiKey) {
 			if (!service) {
 				throw new Error('StorageService: Service parameter is required');
@@ -168,17 +187,23 @@ Format exactly as shown:
 		},
 
 		async getLatestSonnetCache() {
-			return await GM.getValue(this.keys.SONNET_CACHE, null);
+			return /** @type {{ modelId: string, timestamp: number } | null} */ (
+				await GM.getValue(this.keys.SONNET_CACHE, null)
+			);
 		},
 
+		/** @param {string} modelId */
 		async setLatestSonnetCache(modelId) {
 			await GM.setValue(this.keys.SONNET_CACHE, { modelId, timestamp: Date.now() });
 		},
 
 		async getLatestGeminiCache() {
-			return await GM.getValue(this.keys.GEMINI_CACHE, null);
+			return /** @type {{ modelId: string, timestamp: number } | null} */ (
+				await GM.getValue(this.keys.GEMINI_CACHE, null)
+			);
 		},
 
+		/** @param {string} modelId */
 		async setLatestGeminiCache(modelId) {
 			await GM.setValue(this.keys.GEMINI_CACHE, { modelId, timestamp: Date.now() });
 		},
@@ -190,6 +215,7 @@ Format exactly as shown:
 
 	// UI Helper Functions
 	const UIHelpers = {
+		/** @param {boolean} visible */
 		toggleDropdown(visible) {
 			if (dom.dropdown) {
 				dom.dropdown.style.display = visible ? 'block' : 'none';
@@ -204,6 +230,7 @@ Format exactly as shown:
 			this.toggleDropdown(true);
 		},
 
+		/** @param {string} message @param {boolean} [preferOverlay] */
 		showError(message, preferOverlay = false) {
 			if (preferOverlay && dom.overlay) {
 				updateSummaryOverlay(
@@ -218,12 +245,17 @@ Format exactly as shown:
 
 	// Validation Functions
 
+	/** @typedef {HTMLElement & { _escHandler?: (e: KeyboardEvent) => void }} ModalOverlayElement */
+	/** @typedef {{ message?: string, inputType?: string, placeholder?: string, defaultValue?: string }} ModalOptions */
+
 	// Custom Modal Service - Dieter Rams inspired design
 	const ModalService = {
+		/** @type {ModalOverlayElement | null} */
 		currentModal: null,
+		/** @type {((value: any) => void) | null} */
 		resolveCallback: null,
 
-		// Create modal structure
+		/** @param {string} type @param {ModalOptions} [options] */
 		create(type, options = {}) {
 			return new Promise(resolve => {
 				this.resolveCallback = resolve;
@@ -231,14 +263,17 @@ Format exactly as shown:
 			});
 		},
 
+		/** @param {string} type @param {ModalOptions} options */
 		show(type, options) {
 			// Remove existing modal if any
 			this.close();
 
-			const modalOverlay = createElement('div', {
-				id: CONFIG.ids.modalOverlay,
-				className: 'modal-overlay',
-			});
+			const modalOverlay = /** @type {ModalOverlayElement} */ (
+				createElement('div', {
+					id: CONFIG.ids.modalOverlay,
+					className: 'modal-overlay',
+				})
+			);
 
 			const modalContent = createElement('div', {
 				id: CONFIG.ids.modalContent,
@@ -279,7 +314,8 @@ Format exactly as shown:
 					className: 'modal-button modal-button-primary',
 					textContent: 'OK',
 					onclick: () => this.resolve(true),
-					onmouseout: e => e.target.blur(),
+					onmouseout: (/** @type {MouseEvent} */ e) =>
+						/** @type {HTMLElement} */ (e.target)?.blur(),
 				});
 				actionsEl.appendChild(okBtn);
 			} else if (type === 'prompt') {
@@ -287,7 +323,8 @@ Format exactly as shown:
 					className: 'modal-button modal-button-secondary',
 					textContent: 'Cancel',
 					onclick: () => this.resolve(null),
-					onmouseout: e => e.target.blur(),
+					onmouseout: (/** @type {MouseEvent} */ e) =>
+						/** @type {HTMLElement} */ (e.target)?.blur(),
 				});
 				const okBtn = createElement('button', {
 					className: 'modal-button modal-button-primary',
@@ -296,14 +333,15 @@ Format exactly as shown:
 						const value = inputEl?.value || '';
 						this.resolve(value);
 					},
-					onmouseout: e => e.target.blur(),
+					onmouseout: (/** @type {MouseEvent} */ e) =>
+						/** @type {HTMLElement} */ (e.target)?.blur(),
 				});
 				actionsEl.appendChild(cancelBtn);
 				actionsEl.appendChild(okBtn);
 
 				// Enter key submit
 				if (inputEl) {
-					inputEl.addEventListener('keydown', e => {
+					inputEl.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
 						if (e.key === 'Enter') {
 							e.preventDefault();
 							okBtn.click();
@@ -325,6 +363,7 @@ Format exactly as shown:
 			}
 
 			// ESC key handler
+			/** @param {KeyboardEvent} e */
 			const escHandler = e => {
 				if (e.key === 'Escape') {
 					e.preventDefault();
@@ -351,6 +390,7 @@ Format exactly as shown:
 			});
 		},
 
+		/** @param {any} value */
 		resolve(value) {
 			if (this.currentModal?._escHandler) {
 				document.removeEventListener('keydown', this.currentModal._escHandler);
@@ -376,20 +416,26 @@ Format exactly as shown:
 		},
 
 		// Convenience methods
+		/** @param {string} message */
 		async alert(message) {
 			return await this.create('alert', { message });
 		},
 
+		/** @param {string} message @param {string} [defaultValue] @param {string} [placeholder] */
 		async prompt(message, defaultValue = '', placeholder = '') {
-			return await this.create('prompt', { message, defaultValue, placeholder });
+			return /** @type {Promise<string | null>} */ (
+				this.create('prompt', { message, defaultValue, placeholder })
+			);
 		},
 	};
 
 	// Helper to convert service name to Title Case
+	/** @param {string} str */
 	const toTitleCase = str => {
 		return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 	};
 
+	/** @type {{ activeModel: string, articleData: ArticleData | null, currentSummary: Summary | null, dropdownNeedsUpdate: boolean, articleImages: ImageItem[], summaryCache: Map<string, { articleData: ArticleData | null, images: ImageItem[], summary: Summary | null }> }} */
 	const state = {
 		activeModel: CONFIG.modelGroups.claude.models[0].id,
 		articleData: null,
@@ -399,32 +445,37 @@ Format exactly as shown:
 		summaryCache: new Map(), // Cache summaries by model: modelId -> { articleData, images, summary }
 	};
 
+	/** @type {{ button: HTMLElement | null, dropdown: HTMLElement | null, overlay: HTMLElement | null, overlayElements: OverlayElements | null, overlayCleanup: (() => void) | null, lightbox: HTMLElement | null, lightboxElements: LightboxElements | null, lightboxCleanup: (() => void) | null }} */
 	const dom = {
 		button: null,
 		dropdown: null,
 		overlay: null,
 		overlayElements: null,
+		overlayCleanup: null,
 		lightbox: null,
 		lightboxElements: null, // Cache lightbox child elements
 		lightboxCleanup: null, // Store cleanup function for lightbox listeners
 	};
 
+	/** @param {() => void} onLongPress @param {number} [duration] */
 	const createLongPressHandler = (onLongPress, duration = CONFIG.timing.longPressDuration) => {
+		/** @type {ReturnType<typeof setTimeout> | null} */
 		let timer = null;
 		let isLongPress = false;
 
 		const start = () => {
 			isLongPress = false;
-			clearTimeout(timer);
+			if (timer) clearTimeout(timer);
 			timer = setTimeout(() => {
 				isLongPress = true;
 				onLongPress();
 			}, duration);
 		};
 
+		/** @param {Event} [e] */
 		const cancel = e => {
 			if (e) e.stopPropagation();
-			clearTimeout(timer);
+			if (timer) clearTimeout(timer);
 		};
 
 		const check = () => {
@@ -433,6 +484,7 @@ Format exactly as shown:
 			return wasLongPress;
 		};
 
+		/** @param {HTMLElement} element */
 		const attachTo = element => {
 			const passiveOptions = { passive: true };
 			element.addEventListener('mousedown', start);
@@ -447,8 +499,15 @@ Format exactly as shown:
 		return { check, attachTo };
 	};
 
+	/**
+	 * @template {keyof HTMLElementTagNameMap} K
+	 * @param {K} tag
+	 * @param {Record<string, any>} [attrs]
+	 * @param {(string | Node)[]} [children]
+	 * @returns {HTMLElementTagNameMap[K]}
+	 */
 	const createElement = (tag, attrs = {}, children = []) => {
-		const el = document.createElement(tag);
+		const el = /** @type {any} */ (document.createElement(tag));
 
 		// Use for...of for better performance than forEach
 		for (const [key, value] of Object.entries(attrs)) {
@@ -468,11 +527,13 @@ Format exactly as shown:
 		return el;
 	};
 
+	/** @param {Record<string, any>} serviceDefaults @param {Record<string, any>} [modelParams] */
 	const mergeParams = (serviceDefaults, modelParams) => ({
 		...serviceDefaults,
 		...modelParams,
 	});
 
+	/** @param {string} contentHTML @param {boolean} [hasError] @param {boolean} [isLoading] */
 	const buildOverlayContent = (contentHTML, hasError = false, isLoading = false) => {
 		// Optimize: pre-allocate approximate string size and use single concatenation
 		let html = `<div class="summary-content-body">${contentHTML}</div>`;
@@ -540,23 +601,35 @@ Format exactly as shown:
 		if (!contentElement) return;
 
 		// Use querySelector on parent instead of multiple getElementById calls
-		const closeBtn = contentElement.querySelector(`#${CONFIG.ids.closeButton}`);
-		const retryBtn = contentElement.querySelector(`#${CONFIG.ids.retryButton}`);
-		const askBtn = contentElement.querySelector(`#${CONFIG.ids.askButton}`);
-		const questionInput = contentElement.querySelector(`#${CONFIG.ids.questionInput}`);
-		const answerContainer = contentElement.querySelector('#answer-container');
+		const closeBtn = /** @type {HTMLButtonElement | null} */ (
+			contentElement.querySelector(`#${CONFIG.ids.closeButton}`)
+		);
+		const retryBtn = /** @type {HTMLButtonElement | null} */ (
+			contentElement.querySelector(`#${CONFIG.ids.retryButton}`)
+		);
+		const askBtn = /** @type {HTMLButtonElement | null} */ (
+			contentElement.querySelector(`#${CONFIG.ids.askButton}`)
+		);
+		const questionInput = /** @type {HTMLInputElement | null} */ (
+			contentElement.querySelector(`#${CONFIG.ids.questionInput}`)
+		);
+		const answerContainer = /** @type {HTMLElement | null} */ (
+			contentElement.querySelector('#answer-container')
+		);
 
 		// Create handler functions that can be removed later
 		const handlers = {
 			close: () => closeOverlay(),
 			retry: () => processSummarization(),
 			ask: () => handleAskQuestion(),
+			/** @param {KeyboardEvent} e */
 			keypress: e => {
 				if (e.key === 'Enter') handleAskQuestion();
 			},
+			/** @param {MouseEvent} e */
 			galleryClick: e => {
-				const galleryItem = e.target.closest('.gallery-item');
-				if (galleryItem?.dataset.imageIndex) {
+				const galleryItem = /** @type {HTMLElement} */ (e.target)?.closest('.gallery-item');
+				if (galleryItem instanceof HTMLElement && galleryItem.dataset.imageIndex) {
 					const index = parseInt(galleryItem.dataset.imageIndex, 10);
 					openLightbox(index);
 				}
@@ -657,6 +730,7 @@ Format exactly as shown:
 
 			// Optimized lazy loading: Use Intersection Observer API instead of forced scrolling
 			// This is non-blocking and much more performant
+			/** @returns {Promise<void>} */
 			const triggerLazyLoading = () => {
 				return new Promise(resolve => {
 					const images = document.querySelectorAll(
@@ -698,7 +772,9 @@ Format exactly as shown:
 			await triggerLazyLoading();
 
 			const maxImages = CONFIG.limits.maxImages;
+			/** @type {ImageItem[]} */
 			const images = [];
+			/** @type {Set<string>} */
 			const seen = new Set();
 
 			// Track first large image for Economist
@@ -746,8 +822,8 @@ Format exactly as shown:
 					images.push({
 						src,
 						alt: iframe.title || 'Interactive visualization',
-						width: iframe.width || 800,
-						height: iframe.height || 600,
+						width: Number(iframe.width) || 800,
+						height: Number(iframe.height) || 600,
 						type: 'iframe',
 						priority: 1,
 					});
@@ -876,20 +952,25 @@ Format exactly as shown:
 	}
 
 	function setupEventListeners() {
+		const { button, dropdown } = dom;
+		if (!button || !dropdown) return;
+
 		const buttonPressHandler = createLongPressHandler(toggleDropdown);
 
 		document.addEventListener('keydown', handleKeyPress);
 
-		dom.button.addEventListener('click', () => {
+		button.addEventListener('click', () => {
 			if (!buttonPressHandler.check()) processSummarization();
 		});
 
-		buttonPressHandler.attachTo(dom.button);
+		buttonPressHandler.attachTo(button);
 
 		// Event delegation for dropdown items
-		dom.dropdown.addEventListener('click', e => {
-			const modelItem = e.target.closest('.model-item:not(#add-custom-model)');
-			if (modelItem?.dataset.modelId) {
+		dropdown.addEventListener('click', (/** @type {MouseEvent} */ e) => {
+			const modelItem = /** @type {HTMLElement} */ (e.target)?.closest(
+				'.model-item:not(#add-custom-model)',
+			);
+			if (modelItem instanceof HTMLElement && modelItem.dataset.modelId) {
 				state.activeModel = modelItem.dataset.modelId;
 				StorageService.setLastUsedModel(state.activeModel);
 				UIHelpers.hideDropdown();
@@ -908,6 +989,7 @@ Format exactly as shown:
 		});
 	}
 
+	/** @param {HTMLElement} dropdownElement */
 	function populateDropdown(dropdownElement) {
 		const fragment = document.createDocumentFragment();
 
@@ -928,6 +1010,7 @@ Format exactly as shown:
 		dropdownElement.appendChild(fragment);
 	}
 
+	/** @param {string} text @param {string} service */
 	function createHeader(text, service) {
 		const container = createElement('div', { className: 'group-header-container' });
 
@@ -944,7 +1027,7 @@ Format exactly as shown:
 				textContent: 'Reset Key',
 				className: 'reset-key-link',
 				title: `Reset ${text} API Key`,
-				onclick: e => {
+				onclick: (/** @type {MouseEvent} */ e) => {
 					e.preventDefault();
 					e.stopPropagation();
 					handleApiKeyReset(service);
@@ -955,6 +1038,7 @@ Format exactly as shown:
 		return container;
 	}
 
+	/** @param {ModelEntry} modelObj @param {string} service */
 	function createModelItem(modelObj, service) {
 		const item = createElement('div', {
 			className: 'model-item',
@@ -975,6 +1059,7 @@ Format exactly as shown:
 	}
 
 	function toggleDropdown() {
+		if (!dom.dropdown) return;
 		if (dom.dropdown.style.display === 'none') {
 			if (state.dropdownNeedsUpdate) {
 				populateDropdown(dom.dropdown);
@@ -986,17 +1071,20 @@ Format exactly as shown:
 		}
 	}
 
+	/** @param {MouseEvent} event */
 	function handleOutsideClick(event) {
+		const target = /** @type {Node} */ (event.target);
 		if (
 			dom.dropdown &&
 			dom.dropdown.style.display !== 'none' &&
-			!dom.dropdown.contains(event.target) &&
-			!dom.button?.contains(event.target)
+			!dom.dropdown.contains(target) &&
+			!dom.button?.contains(target)
 		) {
 			UIHelpers.hideDropdown();
 		}
 	}
 
+	/** @param {string} contentHTML @param {boolean} [isError] @param {boolean} [isLoading] */
 	function showSummaryOverlay(contentHTML, isError = false, isLoading = false) {
 		if (dom.overlay) {
 			updateSummaryOverlay(contentHTML, isError, isLoading);
@@ -1010,7 +1098,7 @@ Format exactly as shown:
 		document.body.style.overflow = 'hidden';
 
 		// Store cleanup function for proper event listener removal
-		dom.overlayCleanup = attachOverlayHandlers();
+		dom.overlayCleanup = attachOverlayHandlers() ?? null;
 		dom.overlay.onclick = e => e.target === dom.overlay && closeOverlay();
 	}
 
@@ -1037,6 +1125,7 @@ Format exactly as shown:
 		}
 	}
 
+	/** @param {string} contentHTML @param {boolean} [isError] @param {boolean} [isLoading] */
 	function updateSummaryOverlay(contentHTML, isError = false, isLoading = false) {
 		const contentDiv = document.getElementById(CONFIG.ids.content);
 		if (contentDiv) {
@@ -1049,18 +1138,22 @@ Format exactly as shown:
 			contentDiv.innerHTML = buildOverlayContent(contentHTML, isError, isLoading);
 
 			// Reattach handlers with new cleanup function
-			dom.overlayCleanup = attachOverlayHandlers();
+			dom.overlayCleanup = attachOverlayHandlers() ?? null;
 		}
 	}
 
+	/** @param {string} message */
 	function showErrorNotification(message) {
 		const existing = document.getElementById(CONFIG.ids.error);
 		if (existing) existing.remove();
 
-		const errorDiv = createElement('div', {
-			id: CONFIG.ids.error,
-			className: 'error-notification',
-		});
+		const errorDiv =
+			/** @type {HTMLDivElement & { _autoDismissTimeout?: ReturnType<typeof setTimeout> }} */ (
+				createElement('div', {
+					id: CONFIG.ids.error,
+					className: 'error-notification',
+				})
+			);
 
 		const messageEl = createElement('div', {
 			className: 'error-message',
@@ -1104,14 +1197,16 @@ Format exactly as shown:
 		};
 	}
 
+	/** @returns {ModelConfig | null} */
 	function getActiveModelConfig() {
 		const activeId = state.activeModel;
 
 		for (const serviceKey in CONFIG.modelGroups) {
-			const group = CONFIG.modelGroups[serviceKey];
+			const service = /** @type {Service} */ (serviceKey);
+			const group = CONFIG.modelGroups[service];
 			const modelConfig = group.models.find(m => m.id === activeId);
 			if (modelConfig) {
-				return { ...modelConfig, service: serviceKey };
+				return { ...modelConfig, service };
 			}
 		}
 
@@ -1121,6 +1216,12 @@ Format exactly as shown:
 
 	// Refreshes CONFIG.modelGroups[service]'s seed model to the auto-discovered latest one,
 	// and follows state.activeModel along if it was still pointing at that service's model.
+	/**
+	 * @param {keyof typeof CONFIG.modelGroups} service
+	 * @param {string} activePrefix
+	 * @param {(apiKey: string) => Promise<ModelEntry | null>} resolver
+	 * @param {string} apiKey
+	 */
 	async function syncLatestModel(service, activePrefix, resolver, apiKey) {
 		const latest = await resolver(apiKey);
 		if (!latest) return;
@@ -1213,7 +1314,7 @@ Format exactly as shown:
 
 			// Check cache first - use cached summary if available for this model
 			const cachedData = state.summaryCache.get(modelConfig.id);
-			if (cachedData) {
+			if (cachedData?.summary) {
 				// Restore from cache
 				state.articleData = cachedData.articleData;
 				state.articleImages = cachedData.images;
@@ -1228,7 +1329,7 @@ Format exactly as shown:
 			state.articleImages = await extractArticleImages();
 
 			await executeSummarization(articleData, validationResult);
-		} catch (error) {
+		} catch (/** @type {any} */ error) {
 			handleSummarizationError(error);
 			// Show button again on error
 			if (dom.button) dom.button.style.display = 'flex';
@@ -1237,8 +1338,10 @@ Format exactly as shown:
 
 	// Known-stable text model to fall back to if the auto-discovered "latest flash"
 	// model turns out to be a managed-agent/live variant requiring the Interactions API.
+	/** @type {ModelConfig} */
 	const GEMINI_SAFE_FALLBACK = { id: 'gemini-3.5-flash', name: 'Flash', service: 'gemini' };
 
+	/** @param {Error} error @param {string} modelId */
 	function annotateModelError(error, modelId) {
 		error.message = `[${modelId}] ${error.message}`;
 		return error;
@@ -1246,6 +1349,10 @@ Format exactly as shown:
 
 	// Providers occasionally return a transient 503 under high load; one short retry
 	// resolves most of these without bothering the user with a manual re-click.
+	/**
+	 * @param {Service} service @param {string} apiKey @param {string} prompt
+	 * @param {ModelConfig} modelConfig @param {number} [maxTokens]
+	 */
 	async function sendApiRequestWithRetry(service, apiKey, prompt, modelConfig, maxTokens) {
 		const response = await sendApiRequest(service, apiKey, prompt, modelConfig, maxTokens);
 		if (response.status !== 503) return response;
@@ -1255,6 +1362,7 @@ Format exactly as shown:
 		return sendApiRequest(service, apiKey, prompt, modelConfig, maxTokens);
 	}
 
+	/** @param {ArticleData} articleData @param {ValidationResult} validationResult */
 	async function executeSummarization(articleData, validationResult) {
 		const { modelConfig, apiKey, service, modelDisplayName } = validationResult;
 
@@ -1273,7 +1381,7 @@ Format exactly as shown:
 		try {
 			const response = await sendApiRequestWithRetry(service, apiKey, prompt, modelConfig);
 			handleApiResponse(response);
-		} catch (error) {
+		} catch (/** @type {any} */ error) {
 			const canFallBack =
 				service === 'gemini' &&
 				modelConfig.id !== GEMINI_SAFE_FALLBACK.id &&
@@ -1294,12 +1402,13 @@ Format exactly as shown:
 					GEMINI_SAFE_FALLBACK,
 				);
 				handleApiResponse(response);
-			} catch (fallbackError) {
+			} catch (/** @type {any} */ fallbackError) {
 				throw annotateModelError(fallbackError, GEMINI_SAFE_FALLBACK.id);
 			}
 		}
 	}
 
+	/** @param {string} modelDisplayName */
 	function showLoadingState(modelDisplayName) {
 		const loadingMessage = `<p class="glow">Summarizing with ${modelDisplayName}... </p>`;
 		if (dom.overlay) {
@@ -1309,6 +1418,7 @@ Format exactly as shown:
 		}
 	}
 
+	/** @param {Error} error */
 	function handleSummarizationError(error) {
 		const errorMsg = `Error: ${error.message}`;
 		console.error('Summarize with AI:', errorMsg, error);
@@ -1316,6 +1426,11 @@ Format exactly as shown:
 		UIHelpers.hideDropdown();
 	}
 
+	/**
+	 * @param {keyof typeof CONFIG.modelGroups} service @param {string} apiKey @param {string} prompt
+	 * @param {ModelConfig} modelConfig @param {number} [maxTokens]
+	 * @returns {Promise<ApiResponse>}
+	 */
 	async function sendApiRequest(service, apiKey, prompt, modelConfig, maxTokens) {
 		const group = CONFIG.modelGroups[service];
 		let url = group.baseUrl;
@@ -1354,6 +1469,7 @@ Format exactly as shown:
 
 	// Shared GET + status-check + JSON-parse for the two providers' "list models" endpoints;
 	// each provider still does its own candidate filtering/sorting on the returned data.
+	/** @param {string} url @param {Record<string, string>} [headers] @returns {Promise<any>} */
 	function fetchModelsList(url, headers = {}) {
 		return new Promise((resolve, reject) => {
 			GM.xmlHttpRequest({
@@ -1380,19 +1496,24 @@ Format exactly as shown:
 		});
 	}
 
+	/** @param {string} apiKey @returns {Promise<string>} */
 	async function fetchLatestSonnetModel(apiKey) {
 		const data = await fetchModelsList('https://api.anthropic.com/v1/models', {
 			'x-api-key': apiKey,
 			'anthropic-version': '2023-06-01',
 			'anthropic-dangerous-direct-browser-access': 'true',
 		});
+		/** @type {{ id: string }[]} */
 		const sonnetModels = (data.data || [])
-			.filter(m => m.id?.startsWith('claude-sonnet'))
-			.sort((a, b) => b.id.localeCompare(a.id));
+			.filter((/** @type {{ id: string }} */ m) => m.id?.startsWith('claude-sonnet'))
+			.sort((/** @type {{ id: string }} */ a, /** @type {{ id: string }} */ b) =>
+				b.id.localeCompare(a.id),
+			);
 		if (sonnetModels.length === 0) throw new Error('No Sonnet models found');
 		return sonnetModels[0].id;
 	}
 
+	/** @param {string} apiKey @returns {Promise<string>} */
 	async function fetchLatestGeminiFlashModel(apiKey) {
 		const data = await fetchModelsList(
 			`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
@@ -1401,8 +1522,10 @@ Format exactly as shown:
 		// audio, image, tts, managed agents) even though they list generateContent support.
 		const NON_TEXT_VARIANT =
 			/live|audio|tts|image|native-audio|realtime|computer-use|agent|deep-research|antigravity|interaction/;
+		/** @typedef {{ name: string, supportedGenerationMethods?: string[] }} GeminiModel */
+		/** @type {string[]} */
 		const flashModels = (data.models || [])
-			.filter(m => {
+			.filter((/** @type {GeminiModel} */ m) => {
 				const id = m.name?.replace('models/', '');
 				return (
 					id?.includes('flash') &&
@@ -1410,8 +1533,8 @@ Format exactly as shown:
 					(m.supportedGenerationMethods || []).includes('generateContent')
 				);
 			})
-			.map(m => m.name.replace('models/', ''))
-			.sort((a, b) => b.localeCompare(a));
+			.map((/** @type {GeminiModel} */ m) => m.name.replace('models/', ''))
+			.sort((/** @type {string} */ a, /** @type {string} */ b) => b.localeCompare(a));
 		if (flashModels.length === 0) throw new Error('No Gemini Flash models found');
 		return flashModels[0];
 	}
@@ -1420,6 +1543,13 @@ Format exactly as shown:
 
 	// Shared cache-check -> fetch -> cache-store -> catch-and-warn-null flow for both providers'
 	// "latest model" resolution; only the cache accessors, fetcher, and display name differ.
+	/**
+	 * @param {() => Promise<{ modelId: string, timestamp: number } | null>} getCache
+	 * @param {(id: string) => Promise<void>} setCache
+	 * @param {(apiKey: string) => Promise<string>} fetchModel
+	 * @param {string} name @param {string} apiKey @param {string} label
+	 * @returns {Promise<ModelEntry | null>}
+	 */
 	async function resolveLatestModel(getCache, setCache, fetchModel, name, apiKey, label) {
 		try {
 			const cached = await getCache();
@@ -1429,7 +1559,7 @@ Format exactly as shown:
 			const modelId = await fetchModel(apiKey);
 			await setCache(modelId);
 			return { id: modelId, name };
-		} catch (err) {
+		} catch (/** @type {any} */ err) {
 			console.warn(
 				`Summarize with AI: Could not fetch latest ${label} model, using default:`,
 				err.message,
@@ -1438,6 +1568,7 @@ Format exactly as shown:
 		}
 	}
 
+	/** @param {string} apiKey */
 	function resolveLatestSonnetModel(apiKey) {
 		return resolveLatestModel(
 			() => StorageService.getLatestSonnetCache(),
@@ -1449,6 +1580,7 @@ Format exactly as shown:
 		);
 	}
 
+	/** @param {string} apiKey */
 	function resolveLatestGeminiModel(apiKey) {
 		return resolveLatestModel(
 			() => StorageService.getLatestGeminiCache(),
@@ -1482,6 +1614,7 @@ Format exactly as shown:
 		},
 	};
 
+	/** @param {string} htmlString */
 	function cleanSummaryHTML(htmlString) {
 		// Use cached regex for all replacements
 		const { cleanSummary } = REGEX_PATTERNS;
@@ -1528,7 +1661,7 @@ Format exactly as shown:
 			// Thinking-enabled models may prepend parts with `thought: true` before the answer part.
 			const candidate = data?.candidates?.[0];
 			const parts = candidate?.content?.parts || [];
-			const answerPart = parts.find(p => p.text && !p.thought) || parts[0];
+			const answerPart = parts.find((/** @type {any} */ p) => p.text && !p.thought) || parts[0];
 			rawSummary = answerPart?.text || '';
 			finishReason = candidate?.finishReason || null;
 			blockType = answerPart?.thought ? 'thought' : null;
@@ -1541,7 +1674,7 @@ Format exactly as shown:
 			// Claude response format (default)
 			// Extended-thinking responses prepend a `thinking` block before the `text` block.
 			const blocks = data?.content || [];
-			const textBlock = blocks.find(b => b.type === 'text') || blocks[0];
+			const textBlock = blocks.find((/** @type {any} */ b) => b.type === 'text') || blocks[0];
 			finishReason = data?.stop_reason || null;
 			blockType = textBlock?.type || null;
 			if (finishReason === 'max_tokens') {
@@ -1567,6 +1700,7 @@ Format exactly as shown:
 		return { rawSummary, finishReason, blockType };
 	}
 
+	/** @param {ApiResponse} response */
 	function handleApiResponse(response) {
 		const { rawSummary } = extractSummaryFromResponse(response);
 		const cleanedSummary = cleanSummaryHTML(rawSummary);
@@ -1586,6 +1720,12 @@ Format exactly as shown:
 		updateSummaryOverlay(cleanedSummary, false);
 	}
 
+	/**
+	 * @param {string} prompt
+	 * @param {ModelConfig} modelConfig
+	 * @param {Service} service
+	 * @param {number} [maxTokens]
+	 */
 	function buildRequestBody(
 		prompt,
 		modelConfig,
@@ -1615,6 +1755,7 @@ Format exactly as shown:
 		};
 	}
 
+	/** @param {string} apiKey @param {Service} service @returns {Record<string, string>} */
 	function getHeaders(apiKey, service) {
 		if (service === 'gemini') {
 			// Gemini uses API key in URL, not headers
@@ -1632,8 +1773,9 @@ Format exactly as shown:
 		};
 	}
 
+	/** @param {string} service */
 	async function handleApiKeyReset(service) {
-		if (!service || !CONFIG.modelGroups[service]) {
+		if (!service || !CONFIG.modelGroups[/** @type {Service} */ (service)]) {
 			console.error('Invalid service provided for API key reset:', service);
 			await ModalService.alert('Invalid service provided.');
 			return;
@@ -1655,6 +1797,7 @@ Format exactly as shown:
 	}
 
 	// --- Q&A Functionality ---
+	/** @param {string} text */
 	function formatQAAnswer(text) {
 		// Escape HTML first
 		let formatted = escapeHtml(text);
@@ -1800,7 +1943,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			try {
 				const response = await sendApiRequest(service, apiKey, prompt, modelConfig, 800);
 				answer = extractSummaryFromResponse(response).rawSummary;
-			} catch (err) {
+			} catch (/** @type {any} */ err) {
 				throw annotateModelError(err, modelConfig.id);
 			}
 
@@ -1817,7 +1960,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
 			// Clear input
 			questionInput.value = '';
-		} catch (error) {
+		} catch (/** @type {any} */ error) {
 			console.error('Ask question failed:', error);
 			answerContainer.innerHTML = `<p style="color: ${CONFIG.styles.colors.error};">Error: ${escapeHtml(error.message)}</p>`;
 		} finally {
@@ -1830,6 +1973,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		}
 	}
 
+	/** @param {string} text */
 	function escapeHtml(text) {
 		const div = document.createElement('div');
 		div.textContent = text;
@@ -1840,6 +1984,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 	let currentImageIndex = 0;
 	let lightboxZoom = { scale: 1, x: 0, y: 0 };
 
+	/** @param {number} scale */
 	function clampZoomScale(scale) {
 		return Math.min(Math.max(scale, 1), 4);
 	}
@@ -1865,6 +2010,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		}
 	}
 
+	/** @param {number} index */
 	function openLightbox(index) {
 		if (!state.articleImages.length) return;
 
@@ -1875,7 +2021,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		}
 
 		updateLightboxImage();
-		dom.lightbox.style.display = 'flex';
+		if (dom.lightbox) dom.lightbox.style.display = 'flex';
 		document.body.style.overflow = 'hidden';
 	}
 
@@ -1900,9 +2046,10 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 	}
 
 	function createLightbox() {
-		dom.lightbox = createElement('div', {
+		const lightbox = createElement('div', {
 			className: 'lightbox-overlay',
 		});
+		dom.lightbox = lightbox;
 
 		// Create content container
 		const lightboxContent = createElement('div', {
@@ -1963,10 +2110,10 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		menuBar.appendChild(nextBtn);
 		menuBar.appendChild(closeBtn);
 
-		dom.lightbox.appendChild(lightboxContent);
-		dom.lightbox.appendChild(thumbnailStrip);
-		dom.lightbox.appendChild(menuBar);
-		document.body.appendChild(dom.lightbox);
+		lightbox.appendChild(lightboxContent);
+		lightbox.appendChild(thumbnailStrip);
+		lightbox.appendChild(menuBar);
+		document.body.appendChild(lightbox);
 
 		// Cache lightbox elements to avoid repeated DOM queries
 		dom.lightboxElements = {
@@ -1982,12 +2129,13 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		renderThumbnails();
 
 		// Close on overlay click
+		/** @param {MouseEvent} e */
 		const overlayClickHandler = e => {
-			if (e.target === dom.lightbox) {
+			if (e.target === lightbox) {
 				closeLightbox();
 			}
 		};
-		dom.lightbox.addEventListener('click', overlayClickHandler);
+		lightbox.addEventListener('click', overlayClickHandler);
 
 		// Keyboard navigation
 		document.addEventListener('keydown', handleLightboxKeyboard);
@@ -2004,9 +2152,11 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		let isPinching = false;
 		let lastTapTime = 0;
 
+		/** @param {TouchList} touches */
 		const getTouchDistance = touches =>
 			Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
 
+		/** @param {TouchEvent} e */
 		const touchStartHandler = e => {
 			if (e.touches.length === 2) {
 				isPinching = true;
@@ -2023,6 +2173,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			}
 		};
 
+		/** @param {TouchEvent} e */
 		const touchMoveHandler = e => {
 			if (isPinching && e.touches.length === 2) {
 				e.preventDefault();
@@ -2037,6 +2188,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			}
 		};
 
+		/** @param {TouchEvent} e */
 		const touchEndHandler = e => {
 			if (e.touches.length > 0) return;
 
@@ -2077,6 +2229,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		}
 
 		// Desktop zoom: wheel to zoom, drag to pan, double-click to toggle
+		/** @param {WheelEvent} e */
 		const wheelHandler = e => {
 			e.preventDefault();
 			const delta = e.deltaY < 0 ? 0.25 : -0.25;
@@ -2094,6 +2247,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		let dragStart = { x: 0, y: 0 };
 		let dragPanStart = { x: 0, y: 0 };
 
+		/** @param {MouseEvent} e */
 		const mouseDownHandler = e => {
 			if (lightboxZoom.scale <= 1) return;
 			isDragging = true;
@@ -2102,6 +2256,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			img.style.cursor = 'grabbing';
 			e.preventDefault();
 		};
+		/** @param {MouseEvent} e */
 		const mouseMoveHandler = e => {
 			if (!isDragging) return;
 			lightboxZoom.x = dragPanStart.x + (e.clientX - dragStart.x);
@@ -2122,7 +2277,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		// Store cleanup function to remove all event listeners
 		dom.lightboxCleanup = () => {
 			document.removeEventListener('keydown', handleLightboxKeyboard);
-			dom.lightbox.removeEventListener('click', overlayClickHandler);
+			lightbox.removeEventListener('click', overlayClickHandler);
 			lightboxContent.removeEventListener('touchstart', touchStartHandler);
 			lightboxContent.removeEventListener('touchmove', touchMoveHandler);
 			lightboxContent.removeEventListener('touchend', touchEndHandler);
@@ -2177,6 +2332,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		}
 	}
 
+	/** @param {number} direction */
 	function navigateLightbox(direction) {
 		const newIndex = currentImageIndex + direction;
 		if (newIndex >= 0 && newIndex < state.articleImages.length) {
@@ -2225,6 +2381,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		});
 	}
 
+	/** @param {KeyboardEvent} e */
 	function handleLightboxKeyboard(e) {
 		if (!dom.lightbox || dom.lightbox.style.display === 'none') return;
 
@@ -2245,6 +2402,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 	}
 
 	// --- Event Handlers & Utilities ---
+	/** @param {KeyboardEvent} e */
 	function handleKeyPress(e) {
 		if (e.altKey && e.code === 'KeyS' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
 			e.preventDefault();
@@ -2256,7 +2414,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			if (dom.overlay) {
 				e.preventDefault();
 				closeOverlay();
-			} else if (dom.dropdown?.style.display !== 'none') {
+			} else if (dom.dropdown && dom.dropdown.style.display !== 'none') {
 				e.preventDefault();
 				dom.dropdown.style.display = 'none';
 			}
@@ -2264,6 +2422,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 	}
 
 	function setupFocusListeners() {
+		/** @type {ReturnType<typeof setTimeout> | null} */
 		let focusOutTimer = null;
 
 		document.addEventListener('focusin', event => {

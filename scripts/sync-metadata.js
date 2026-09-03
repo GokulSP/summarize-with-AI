@@ -6,6 +6,11 @@ const USER_JS = 'Summarize with AI.user.js';
 const META_JS = 'Summarize with AI.meta.js';
 const PACKAGE_JSON = 'package.json';
 
+/** @typedef {{ type: 'tag', tag: string, value: string } | { type: 'boundary' | 'comment' | 'empty' | 'other', line: string }} MetaLine */
+
+/** @type {(l: MetaLine) => l is Extract<MetaLine, { type: 'tag' }>} */
+const isTagLine = l => l.type === 'tag';
+
 function formatUserscriptMetadata() {
 	console.log('Formatting userscript metadata...');
 
@@ -21,6 +26,7 @@ function formatUserscriptMetadata() {
 	const metadata = content.substring(metaStart, metaEnd + '// ==/UserScript=='.length);
 
 	const lines = metadata.split('\n');
+	/** @type {MetaLine[]} */
 	const metaLines = [];
 
 	for (const line of lines) {
@@ -41,7 +47,7 @@ function formatUserscriptMetadata() {
 		}
 	}
 
-	const tagLines = metaLines.filter(l => l.type === 'tag');
+	const tagLines = metaLines.filter(isTagLine);
 	const maxTagLength = Math.max(...tagLines.map(l => l.tag.length));
 
 	const formattedLines = metaLines.map(item => {
@@ -83,6 +89,7 @@ function syncMetadata() {
 	return version;
 }
 
+/** @param {string | undefined} version */
 function syncPackageVersion(version) {
 	if (!version) return;
 
@@ -100,6 +107,6 @@ try {
 	const version = syncMetadata();
 	syncPackageVersion(version);
 } catch (error) {
-	console.error(`Error: ${error.message}`);
+	console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
 	process.exit(1);
 }
