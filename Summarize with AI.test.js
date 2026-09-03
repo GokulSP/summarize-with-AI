@@ -64,6 +64,29 @@ describe("cleanSummaryHTML", () => {
 		const input = "```\n<p>Summary text.</p>\n```";
 		expect(helpers.cleanSummaryHTML(input)).toBe("<p>Summary text.</p>");
 	});
+
+	// Prompt-injected AI output is untrusted HTML injected via innerHTML into the host
+	// page, so these prove the allowlist sanitizer (not just the regex cleanup above)
+	// actually blocks the standard XSS vectors rather than just cosmetic tag stripping.
+	it("removes a <script> tag entirely, including its content", () => {
+		const input = "<p>Summary</p><script>alert(1)</script>";
+		expect(helpers.cleanSummaryHTML(input)).toBe("<p>Summary</p>");
+	});
+
+	it("strips an onerror handler (and the disallowed <img> tag carrying it)", () => {
+		const input = '<p>Article summary</p><img src="x" onerror="alert(1)">';
+		expect(helpers.cleanSummaryHTML(input)).toBe("<p>Article summary</p>");
+	});
+
+	it("strips a javascript: href but keeps the link text and a safe href intact", () => {
+		const malicious = '<p>See <a href="javascript:alert(1)">this link</a> for details.</p>';
+		expect(helpers.cleanSummaryHTML(malicious)).toBe("<p>See <a>this link</a> for details.</p>");
+
+		const safe = '<p>See <a href="https://example.com">this link</a> for details.</p>';
+		expect(helpers.cleanSummaryHTML(safe)).toBe(
+			'<p>See <a href="https://example.com">this link</a> for details.</p>',
+		);
+	});
 });
 
 describe("formatQAAnswer", () => {
