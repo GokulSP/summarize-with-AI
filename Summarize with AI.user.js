@@ -26,22 +26,22 @@
 	const CONFIG = {
 		// DOM Element IDs
 		ids: {
-			button: 'summarize-button',
-			dropdown: 'model-dropdown',
-			overlay: 'summarize-overlay',
-			closeButton: 'summarize-close',
-			content: 'summarize-content',
-			error: 'summarize-error',
-			retryButton: 'summarize-retry-button',
-			askButton: 'summarize-ask-button',
-			questionInput: 'summarize-question-input',
-			questionSection: 'summarize-question-section',
-			modal: 'custom-modal',
-			modalOverlay: 'custom-modal-overlay',
-			modalContent: 'custom-modal-content',
-			modalMessage: 'custom-modal-message',
-			modalInput: 'custom-modal-input',
-			modalActions: 'custom-modal-actions',
+			button: "summarize-button",
+			dropdown: "model-dropdown",
+			overlay: "summarize-overlay",
+			closeButton: "summarize-close",
+			content: "summarize-content",
+			error: "summarize-error",
+			retryButton: "summarize-retry-button",
+			askButton: "summarize-ask-button",
+			questionInput: "summarize-question-input",
+			questionSection: "summarize-question-section",
+			modal: "custom-modal",
+			modalOverlay: "custom-modal-overlay",
+			modalContent: "custom-modal-content",
+			modalMessage: "custom-modal-message",
+			modalInput: "custom-modal-input",
+			modalActions: "custom-modal-actions",
 		},
 
 		// Timing & Duration (milliseconds)
@@ -72,17 +72,17 @@
 		// Model Groups
 		modelGroups: {
 			claude: {
-				name: 'Claude',
-				baseUrl: 'https://api.anthropic.com/v1/messages',
-				models: [{ id: 'claude-sonnet-4-6', name: 'Sonnet' }],
+				name: "Claude",
+				baseUrl: "https://api.anthropic.com/v1/messages",
+				models: [{ id: "claude-sonnet-4-6", name: "Sonnet" }],
 				get defaultParams() {
 					return { max_tokens: CONFIG.limits.defaultMaxTokens };
 				},
 			},
 			gemini: {
-				name: 'Gemini',
-				baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
-				models: [{ id: 'gemini-3.5-flash', name: 'Flash' }],
+				name: "Gemini",
+				baseUrl: "https://generativelanguage.googleapis.com/v1beta/models",
+				models: [{ id: "gemini-3.5-flash", name: "Flash" }],
 			},
 		},
 
@@ -91,8 +91,8 @@
 			fontFamily:
 				'-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
 			colors: {
-				activeModel: '#1A73E8',
-				error: '#d32f2f',
+				activeModel: "#1A73E8",
+				error: "#d32f2f",
 			},
 		},
 	};
@@ -144,9 +144,9 @@ Format exactly as shown:
 	// Storage Layer - Centralized storage operations
 	const StorageService = {
 		keys: {
-			LAST_USED_MODEL: 'last_used_model',
-			SONNET_CACHE: 'latest_sonnet_cache',
-			GEMINI_CACHE: 'latest_gemini_cache',
+			LAST_USED_MODEL: "last_used_model",
+			SONNET_CACHE: "latest_sonnet_cache",
+			GEMINI_CACHE: "latest_gemini_cache",
 			/** @param {string} service */
 			API_KEY: service => `${service}_api_key`,
 		},
@@ -159,7 +159,7 @@ Format exactly as shown:
 		/** @param {string} modelId */
 		async setLastUsedModel(modelId) {
 			if (!modelId) {
-				console.warn('StorageService: Cannot save empty model ID');
+				console.warn("StorageService: Cannot save empty model ID");
 				return;
 			}
 			return await GM.setValue(this.keys.LAST_USED_MODEL, modelId);
@@ -168,7 +168,7 @@ Format exactly as shown:
 		/** @param {string} service */
 		async getApiKey(service) {
 			if (!service) {
-				console.error('StorageService: Service parameter is required');
+				console.error("StorageService: Service parameter is required");
 				return null;
 			}
 			const apiKey = /** @type {string | undefined} */ (
@@ -180,9 +180,9 @@ Format exactly as shown:
 		/** @param {string} service @param {string} apiKey */
 		async setApiKey(service, apiKey) {
 			if (!service) {
-				throw new Error('StorageService: Service parameter is required');
+				throw new Error("StorageService: Service parameter is required");
 			}
-			const keyToSave = (apiKey || '').trim();
+			const keyToSave = (apiKey || "").trim();
 			return await GM.setValue(this.keys.API_KEY(service), keyToSave);
 		},
 
@@ -218,7 +218,7 @@ Format exactly as shown:
 		/** @param {boolean} visible */
 		toggleDropdown(visible) {
 			if (dom.dropdown) {
-				dom.dropdown.style.display = visible ? 'block' : 'none';
+				dom.dropdown.style.display = visible ? "block" : "none";
 			}
 		},
 
@@ -269,22 +269,22 @@ Format exactly as shown:
 			this.close();
 
 			const modalOverlay = /** @type {ModalOverlayElement} */ (
-				createElement('div', {
+				createElement("div", {
 					id: CONFIG.ids.modalOverlay,
-					className: 'modal-overlay',
+					className: "modal-overlay",
 				})
 			);
 
-			const modalContent = createElement('div', {
+			const modalContent = createElement("div", {
 				id: CONFIG.ids.modalContent,
 				className: `modal-content modal-${type}`,
 			});
 
 			// Message
 			if (options.message) {
-				const messageEl = createElement('div', {
+				const messageEl = createElement("div", {
 					id: CONFIG.ids.modalMessage,
-					className: 'modal-message',
+					className: "modal-message",
 					innerHTML: options.message,
 				});
 				modalContent.appendChild(messageEl);
@@ -292,45 +292,45 @@ Format exactly as shown:
 
 			// Input field for prompt type
 			let inputEl = null;
-			if (type === 'prompt') {
-				inputEl = createElement('input', {
+			if (type === "prompt") {
+				inputEl = createElement("input", {
 					id: CONFIG.ids.modalInput,
-					className: 'modal-input',
-					type: options.inputType || 'text',
-					placeholder: options.placeholder || '',
-					value: options.defaultValue || '',
+					className: "modal-input",
+					type: options.inputType || "text",
+					placeholder: options.placeholder || "",
+					value: options.defaultValue || "",
 				});
 				modalContent.appendChild(inputEl);
 			}
 
 			// Actions
-			const actionsEl = createElement('div', {
+			const actionsEl = createElement("div", {
 				id: CONFIG.ids.modalActions,
-				className: 'modal-actions',
+				className: "modal-actions",
 			});
 
-			if (type === 'alert') {
-				const okBtn = createElement('button', {
-					className: 'modal-button modal-button-primary',
-					textContent: 'OK',
+			if (type === "alert") {
+				const okBtn = createElement("button", {
+					className: "modal-button modal-button-primary",
+					textContent: "OK",
 					onclick: () => this.resolve(true),
 					onmouseout: (/** @type {MouseEvent} */ e) =>
 						/** @type {HTMLElement} */ (e.target)?.blur(),
 				});
 				actionsEl.appendChild(okBtn);
-			} else if (type === 'prompt') {
-				const cancelBtn = createElement('button', {
-					className: 'modal-button modal-button-secondary',
-					textContent: 'Cancel',
+			} else if (type === "prompt") {
+				const cancelBtn = createElement("button", {
+					className: "modal-button modal-button-secondary",
+					textContent: "Cancel",
 					onclick: () => this.resolve(null),
 					onmouseout: (/** @type {MouseEvent} */ e) =>
 						/** @type {HTMLElement} */ (e.target)?.blur(),
 				});
-				const okBtn = createElement('button', {
-					className: 'modal-button modal-button-primary',
-					textContent: 'OK',
+				const okBtn = createElement("button", {
+					className: "modal-button modal-button-primary",
+					textContent: "OK",
 					onclick: () => {
-						const value = inputEl?.value || '';
+						const value = inputEl?.value || "";
 						this.resolve(value);
 					},
 					onmouseout: (/** @type {MouseEvent} */ e) =>
@@ -341,11 +341,11 @@ Format exactly as shown:
 
 				// Enter key submit
 				if (inputEl) {
-					inputEl.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
-						if (e.key === 'Enter') {
+					inputEl.addEventListener("keydown", (/** @type {KeyboardEvent} */ e) => {
+						if (e.key === "Enter") {
 							e.preventDefault();
 							okBtn.click();
-						} else if (e.key === 'Escape') {
+						} else if (e.key === "Escape") {
 							e.preventDefault();
 							cancelBtn.click();
 						}
@@ -365,16 +365,16 @@ Format exactly as shown:
 			// ESC key handler
 			/** @param {KeyboardEvent} e */
 			const escHandler = e => {
-				if (e.key === 'Escape') {
+				if (e.key === "Escape") {
 					e.preventDefault();
-					this.resolve(type === 'prompt' ? null : false);
+					this.resolve(type === "prompt" ? null : false);
 				}
 			};
-			document.addEventListener('keydown', escHandler);
+			document.addEventListener("keydown", escHandler);
 			modalOverlay._escHandler = escHandler;
 
 			// Click outside to close (only for alerts)
-			if (type === 'alert') {
+			if (type === "alert") {
 				modalOverlay.onclick = e => {
 					if (e.target === modalOverlay) {
 						this.resolve(true);
@@ -386,18 +386,18 @@ Format exactly as shown:
 
 			// Animation
 			requestAnimationFrame(() => {
-				modalOverlay.classList.add('modal-active');
+				modalOverlay.classList.add("modal-active");
 			});
 		},
 
 		/** @param {any} value */
 		resolve(value) {
 			if (this.currentModal?._escHandler) {
-				document.removeEventListener('keydown', this.currentModal._escHandler);
+				document.removeEventListener("keydown", this.currentModal._escHandler);
 			}
 
 			if (this.currentModal) {
-				this.currentModal.classList.remove('modal-active');
+				this.currentModal.classList.remove("modal-active");
 				setTimeout(() => {
 					this.close();
 					if (this.resolveCallback) {
@@ -418,13 +418,13 @@ Format exactly as shown:
 		// Convenience methods
 		/** @param {string} message */
 		async alert(message) {
-			return await this.create('alert', { message });
+			return await this.create("alert", { message });
 		},
 
 		/** @param {string} message @param {string} [defaultValue] @param {string} [placeholder] */
-		async prompt(message, defaultValue = '', placeholder = '') {
+		async prompt(message, defaultValue = "", placeholder = "") {
 			return /** @type {Promise<string | null>} */ (
-				this.create('prompt', { message, defaultValue, placeholder })
+				this.create("prompt", { message, defaultValue, placeholder })
 			);
 		},
 	};
@@ -487,13 +487,13 @@ Format exactly as shown:
 		/** @param {HTMLElement} element */
 		const attachTo = element => {
 			const passiveOptions = { passive: true };
-			element.addEventListener('mousedown', start);
-			element.addEventListener('mouseup', cancel);
-			element.addEventListener('mouseleave', cancel);
-			element.addEventListener('touchstart', start, passiveOptions);
-			element.addEventListener('touchend', cancel);
-			element.addEventListener('touchmove', cancel);
-			element.addEventListener('touchcancel', cancel);
+			element.addEventListener("mousedown", start);
+			element.addEventListener("mouseup", cancel);
+			element.addEventListener("mouseleave", cancel);
+			element.addEventListener("touchstart", start, passiveOptions);
+			element.addEventListener("touchend", cancel);
+			element.addEventListener("touchmove", cancel);
+			element.addEventListener("touchcancel", cancel);
 		};
 
 		return { check, attachTo };
@@ -511,9 +511,9 @@ Format exactly as shown:
 
 		// Use for...of for better performance than forEach
 		for (const [key, value] of Object.entries(attrs)) {
-			if (key === 'style') {
+			if (key === "style") {
 				el.style.cssText = value;
-			} else if (key.startsWith('on')) {
+			} else if (key.startsWith("on")) {
 				el.addEventListener(key.substring(2).toLowerCase(), value);
 			} else {
 				el[key] = value;
@@ -521,7 +521,7 @@ Format exactly as shown:
 		}
 
 		for (const child of children) {
-			el.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+			el.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
 		}
 
 		return el;
@@ -550,7 +550,7 @@ Format exactly as shown:
 				);
 				for (let i = 0; i < displayLimit; i++) {
 					const item = state.articleImages[i];
-					if (item.type === 'iframe') {
+					if (item.type === "iframe") {
 						galleryItems.push(`<div class="gallery-item gallery-item-iframe" data-image-index="${i}">
                 <div class="iframe-preview">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -564,11 +564,11 @@ Format exactly as shown:
               </div>`);
 					} else {
 						galleryItems.push(`<div class="gallery-item" data-image-index="${i}">
-                <img src="${item.src}" alt="${item.alt || 'Article image'}" loading="lazy" decoding="async" />
+                <img src="${item.src}" alt="${item.alt || "Article image"}" loading="lazy" decoding="async" />
               </div>`);
 					}
 				}
-				html += `<div class="image-gallery">${galleryItems.join('')}</div>`;
+				html += `<div class="image-gallery">${galleryItems.join("")}</div>`;
 			}
 
 			// Add Q&A section after summary (but not during loading or error states)
@@ -614,7 +614,7 @@ Format exactly as shown:
 			contentElement.querySelector(`#${CONFIG.ids.questionInput}`)
 		);
 		const answerContainer = /** @type {HTMLElement | null} */ (
-			contentElement.querySelector('#answer-container')
+			contentElement.querySelector("#answer-container")
 		);
 
 		// Create handler functions that can be removed later
@@ -624,11 +624,11 @@ Format exactly as shown:
 			ask: () => handleAskQuestion(),
 			/** @param {KeyboardEvent} e */
 			keypress: e => {
-				if (e.key === 'Enter') handleAskQuestion();
+				if (e.key === "Enter") handleAskQuestion();
 			},
 			/** @param {MouseEvent} e */
 			galleryClick: e => {
-				const galleryItem = /** @type {HTMLElement} */ (e.target)?.closest('.gallery-item');
+				const galleryItem = /** @type {HTMLElement} */ (e.target)?.closest(".gallery-item");
 				if (galleryItem instanceof HTMLElement && galleryItem.dataset.imageIndex) {
 					const index = parseInt(galleryItem.dataset.imageIndex, 10);
 					openLightbox(index);
@@ -637,18 +637,18 @@ Format exactly as shown:
 		};
 
 		// Attach event listeners
-		if (closeBtn) closeBtn.addEventListener('click', handlers.close);
-		if (retryBtn) retryBtn.addEventListener('click', handlers.retry);
-		if (askBtn) askBtn.addEventListener('click', handlers.ask);
-		if (questionInput) questionInput.addEventListener('keypress', handlers.keypress);
+		if (closeBtn) closeBtn.addEventListener("click", handlers.close);
+		if (retryBtn) retryBtn.addEventListener("click", handlers.retry);
+		if (askBtn) askBtn.addEventListener("click", handlers.ask);
+		if (questionInput) questionInput.addEventListener("keypress", handlers.keypress);
 
 		// Optimize: Use event delegation instead of attaching handlers to each item
 		const imageGallery = /** @type {HTMLElement | null} */ (
-			contentElement.querySelector('.image-gallery')
+			contentElement.querySelector(".image-gallery")
 		);
 		if (imageGallery && !imageGallery.dataset.hasListener) {
-			imageGallery.dataset.hasListener = 'true';
-			imageGallery.addEventListener('click', handlers.galleryClick);
+			imageGallery.dataset.hasListener = "true";
+			imageGallery.addEventListener("click", handlers.galleryClick);
 		}
 
 		// Cache elements for reuse
@@ -663,12 +663,12 @@ Format exactly as shown:
 
 		// Return cleanup function to remove all event listeners
 		return () => {
-			if (closeBtn) closeBtn.removeEventListener('click', handlers.close);
-			if (retryBtn) retryBtn.removeEventListener('click', handlers.retry);
-			if (askBtn) askBtn.removeEventListener('click', handlers.ask);
-			if (questionInput) questionInput.removeEventListener('keypress', handlers.keypress);
+			if (closeBtn) closeBtn.removeEventListener("click", handlers.close);
+			if (retryBtn) retryBtn.removeEventListener("click", handlers.retry);
+			if (askBtn) askBtn.removeEventListener("click", handlers.ask);
+			if (questionInput) questionInput.removeEventListener("keypress", handlers.keypress);
 			if (imageGallery) {
-				imageGallery.removeEventListener('click', handlers.galleryClick);
+				imageGallery.removeEventListener("click", handlers.galleryClick);
 				delete imageGallery.dataset.hasListener;
 			}
 		};
@@ -690,7 +690,7 @@ Format exactly as shown:
 		try {
 			const documentClone = /** @type {Document} */ (document.cloneNode(true));
 			const nonContentElements = documentClone.querySelectorAll(
-				'script, style, noscript, iframe, figure, img, svg, header, footer, nav',
+				"script, style, noscript, iframe, figure, img, svg, header, footer, nav",
 			);
 
 			// Optimize: remove in forward order (no need to reverse iterate with NodeList)
@@ -707,7 +707,7 @@ Format exactly as shown:
 				? { title: parsedArticle.title, content: parsedArticle.textContent.trim() }
 				: null;
 		} catch (error) {
-			console.error('Summarize with AI: Article parsing failed:', error);
+			console.error("Summarize with AI: Article parsing failed:", error);
 			return null;
 		}
 	}
@@ -724,9 +724,9 @@ Format exactly as shown:
 		try {
 			// Site-specific detection (cached once)
 			const hostname = window.location.hostname;
-			const isHBR = hostname.includes('hbr.org');
-			const isEconomist = hostname.includes('economist.com');
-			const isMcKinsey = hostname.includes('mckinsey.com');
+			const isHBR = hostname.includes("hbr.org");
+			const isEconomist = hostname.includes("economist.com");
+			const isMcKinsey = hostname.includes("mckinsey.com");
 
 			// Optimized lazy loading: Use Intersection Observer API instead of forced scrolling
 			// This is non-blocking and much more performant
@@ -756,7 +756,7 @@ Format exactly as shown:
 						observer.observe(img);
 						// Trigger load by scrolling into view (non-blocking)
 						requestAnimationFrame(() => {
-							img.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+							img.scrollIntoView({ block: "nearest", behavior: "auto" });
 							loadedCount++;
 							if (loadedCount === images.length) {
 								clearTimeout(timeout);
@@ -782,18 +782,18 @@ Format exactly as shown:
 
 			// HBR.org URL exclusion - Use array for iteration, Set for checking
 			const hbrExcludedUrls = [
-				'https://hbr.org/resources/images/article_assets/2015/12/HBR-Ideacast-HP-feed.png',
-				'https://hbr.org/resources/images/article_assets/2019/03/wide-cold-call.png',
-				'https://hbr.org/resources/images/podcasts/episode-ideacast.png',
-				'https://hbr.org/resources/images/podcasts/episode-cold-call.png',
-				'https://hbr.org/resources/images/products/generic-tool.png',
-				'https://hbr.org/resources/images/article_assets/2023/05/wide-hbr-on-leadership.png',
-				'https://hbr.org/resources/images/article_assets/2019/04/WomenAtWork-Wide_WP_1200.png',
+				"https://hbr.org/resources/images/article_assets/2015/12/HBR-Ideacast-HP-feed.png",
+				"https://hbr.org/resources/images/article_assets/2019/03/wide-cold-call.png",
+				"https://hbr.org/resources/images/podcasts/episode-ideacast.png",
+				"https://hbr.org/resources/images/podcasts/episode-cold-call.png",
+				"https://hbr.org/resources/images/products/generic-tool.png",
+				"https://hbr.org/resources/images/article_assets/2023/05/wide-hbr-on-leadership.png",
+				"https://hbr.org/resources/images/article_assets/2019/04/WomenAtWork-Wide_WP_1200.png",
 			];
-			const hbrExcludedPrefix = 'https://cdn11.bigcommerce.com/';
+			const hbrExcludedPrefix = "https://cdn11.bigcommerce.com/";
 
 			// Visualization domains for fast checking
-			const vizDomains = ['flo.uri.sh', 'flourish', 'datawrapper.dwcdn.net'];
+			const vizDomains = ["flo.uri.sh", "flourish", "datawrapper.dwcdn.net"];
 
 			// STEP 1: Extract interactive visualizations FIRST (highest priority)
 			const iframeSelector =
@@ -821,10 +821,10 @@ Format exactly as shown:
 					seen.add(src);
 					images.push({
 						src,
-						alt: iframe.title || 'Interactive visualization',
+						alt: iframe.title || "Interactive visualization",
 						width: Number(iframe.width) || 800,
 						height: Number(iframe.height) || 600,
-						type: 'iframe',
+						type: "iframe",
 						priority: 1,
 					});
 				}
@@ -842,12 +842,12 @@ Format exactly as shown:
 					if (images.length >= maxImages) break;
 
 					const src = img.currentSrc || img.src || img.dataset.src || img.dataset.lazySrc;
-					if (!src || seen.has(src) || src.startsWith('data:')) continue;
+					if (!src || seen.has(src) || src.startsWith("data:")) continue;
 
 					// Combine Economist filters in single check
 					if (isEconomist) {
 						const hasPromotionalClass = img.closest('[class*="e1kb1ha80"]') !== null;
-						const isHeaderImage = src.includes('_DE_');
+						const isHeaderImage = src.includes("_DE_");
 						// "More from"/related-article teaser cards use CSS-module classes like
 						// teaser_mb-teaser__k_8Tk and media_mb-teaser__media__JtjA2 — the hashed
 						// suffix changes per Economist deploy, but the mb-teaser token is stable.
@@ -868,9 +868,9 @@ Format exactly as shown:
 					// McKinsey: exclude staff headshots and thumbnail crops
 					if (isMcKinsey) {
 						if (
-							src.includes('/our%20people/') ||
-							src.includes('-thumb') ||
-							src.includes('headshot')
+							src.includes("/our%20people/") ||
+							src.includes("-thumb") ||
+							src.includes("headshot")
 						)
 							continue;
 					}
@@ -881,20 +881,20 @@ Format exactly as shown:
 					let isEconomistChart = false;
 
 					// Extract width from URL parameters
-					if (isEconomist && src.includes('cdn-cgi/image/width=')) {
+					if (isEconomist && src.includes("cdn-cgi/image/width=")) {
 						const match = IMAGE_EXTRACTION_REGEX.economistWidth.exec(src);
 						if (match) {
 							width = parseInt(match[1], 10);
 							height = Math.round(width * IMAGE_ASPECT_RATIO);
 
 							// Detect Economist charts (WBC = Weekly Business Chart, or content-assets/images path)
-							isEconomistChart = src.includes('WBC') || src.includes('content-assets/images');
+							isEconomistChart = src.includes("WBC") || src.includes("content-assets/images");
 						}
 					}
 
 					// McKinsey exhibit charts are vector SVGs (often gzipped .svgz) with no
 					// intrinsic raster size, so naturalWidth/naturalHeight report 0
-					const isMcKinseySvgChart = isMcKinsey && (src.includes('.svgz') || src.includes('.svg'));
+					const isMcKinseySvgChart = isMcKinsey && (src.includes(".svgz") || src.includes(".svg"));
 
 					// Combined size filters (with exemptions for Economist/McKinsey charts)
 					if (width < 300 || height < 300) {
@@ -920,10 +920,10 @@ Format exactly as shown:
 					seen.add(src);
 					images.push({
 						src,
-						alt: img.alt || '',
+						alt: img.alt || "",
 						width,
 						height,
-						type: 'image',
+						type: "image",
 						priority: 0,
 					});
 				}
@@ -931,7 +931,7 @@ Format exactly as shown:
 
 			return images;
 		} catch (error) {
-			console.error('Summarize with AI: Image extraction failed:', error);
+			console.error("Summarize with AI: Image extraction failed:", error);
 			return [];
 		}
 	}
@@ -939,10 +939,10 @@ Format exactly as shown:
 	function addSummarizeButton() {
 		if (dom.button) return;
 
-		dom.button = createElement('div', {
+		dom.button = createElement("div", {
 			id: CONFIG.ids.button,
-			textContent: 'S',
-			title: 'Summarize (Alt+S) / Long Press or Tap & Hold to Select Model',
+			textContent: "S",
+			title: "Summarize (Alt+S) / Long Press or Tap & Hold to Select Model",
 		});
 		document.body.appendChild(dom.button);
 
@@ -957,18 +957,18 @@ Format exactly as shown:
 
 		const buttonPressHandler = createLongPressHandler(toggleDropdown);
 
-		document.addEventListener('keydown', handleKeyPress);
+		document.addEventListener("keydown", handleKeyPress);
 
-		button.addEventListener('click', () => {
+		button.addEventListener("click", () => {
 			if (!buttonPressHandler.check()) processSummarization();
 		});
 
 		buttonPressHandler.attachTo(button);
 
 		// Event delegation for dropdown items
-		dropdown.addEventListener('click', (/** @type {MouseEvent} */ e) => {
+		dropdown.addEventListener("click", (/** @type {MouseEvent} */ e) => {
 			const modelItem = /** @type {HTMLElement} */ (e.target)?.closest(
-				'.model-item:not(#add-custom-model)',
+				".model-item:not(#add-custom-model)",
 			);
 			if (modelItem instanceof HTMLElement && modelItem.dataset.modelId) {
 				state.activeModel = modelItem.dataset.modelId;
@@ -978,14 +978,14 @@ Format exactly as shown:
 			}
 		});
 
-		document.addEventListener('click', handleOutsideClick);
+		document.addEventListener("click", handleOutsideClick);
 		setupFocusListeners();
 	}
 
 	function createDropdownElement() {
-		return createElement('div', {
+		return createElement("div", {
 			id: CONFIG.ids.dropdown,
-			style: 'display: none',
+			style: "display: none",
 		});
 	}
 
@@ -997,7 +997,7 @@ Format exactly as shown:
 			const models = group.models || [];
 
 			if (models.length > 0) {
-				const groupDiv = createElement('div', { className: 'model-group' });
+				const groupDiv = createElement("div", { className: "model-group" });
 				groupDiv.appendChild(createHeader(group.name, service));
 				for (const modelObj of models) {
 					groupDiv.appendChild(createModelItem(modelObj, service));
@@ -1006,26 +1006,26 @@ Format exactly as shown:
 			}
 		}
 
-		dropdownElement.innerHTML = '';
+		dropdownElement.innerHTML = "";
 		dropdownElement.appendChild(fragment);
 	}
 
 	/** @param {string} text @param {string} service */
 	function createHeader(text, service) {
-		const container = createElement('div', { className: 'group-header-container' });
+		const container = createElement("div", { className: "group-header-container" });
 
 		container.appendChild(
-			createElement('span', {
-				className: 'group-header-text',
+			createElement("span", {
+				className: "group-header-text",
 				textContent: text,
 			}),
 		);
 
 		container.appendChild(
-			createElement('a', {
-				href: '#',
-				textContent: 'Reset Key',
-				className: 'reset-key-link',
+			createElement("a", {
+				href: "#",
+				textContent: "Reset Key",
+				className: "reset-key-link",
 				title: `Reset ${text} API Key`,
 				onclick: (/** @type {MouseEvent} */ e) => {
 					e.preventDefault();
@@ -1040,10 +1040,10 @@ Format exactly as shown:
 
 	/** @param {ModelEntry} modelObj @param {string} service */
 	function createModelItem(modelObj, service) {
-		const item = createElement('div', {
-			className: 'model-item',
+		const item = createElement("div", {
+			className: "model-item",
 			textContent: modelObj.name || modelObj.id,
-			title: 'Click to use this model.',
+			title: "Click to use this model.",
 		});
 
 		// Store data as attributes for event delegation
@@ -1051,7 +1051,7 @@ Format exactly as shown:
 		item.dataset.service = service;
 
 		if (modelObj.id === state.activeModel) {
-			item.style.fontWeight = 'normal';
+			item.style.fontWeight = "normal";
 			item.style.color = CONFIG.styles.colors.activeModel;
 		}
 
@@ -1060,7 +1060,7 @@ Format exactly as shown:
 
 	function toggleDropdown() {
 		if (!dom.dropdown) return;
-		if (dom.dropdown.style.display === 'none') {
+		if (dom.dropdown.style.display === "none") {
 			if (state.dropdownNeedsUpdate) {
 				populateDropdown(dom.dropdown);
 				state.dropdownNeedsUpdate = false;
@@ -1076,7 +1076,7 @@ Format exactly as shown:
 		const target = /** @type {Node} */ (event.target);
 		if (
 			dom.dropdown &&
-			dom.dropdown.style.display !== 'none' &&
+			dom.dropdown.style.display !== "none" &&
 			!dom.dropdown.contains(target) &&
 			!dom.button?.contains(target)
 		) {
@@ -1091,11 +1091,11 @@ Format exactly as shown:
 			return;
 		}
 
-		dom.overlay = createElement('div', { id: CONFIG.ids.overlay });
+		dom.overlay = createElement("div", { id: CONFIG.ids.overlay });
 		dom.overlay.innerHTML = `<div id="${CONFIG.ids.content}">${buildOverlayContent(contentHTML, isError, isLoading)}</div>`;
 
 		document.body.appendChild(dom.overlay);
-		document.body.style.overflow = 'hidden';
+		document.body.style.overflow = "hidden";
 
 		// Store cleanup function for proper event listener removal
 		dom.overlayCleanup = attachOverlayHandlers() ?? null;
@@ -1113,7 +1113,7 @@ Format exactly as shown:
 			dom.overlay.remove();
 			dom.overlay = null;
 			dom.overlayElements = null;
-			document.body.style.overflow = '';
+			document.body.style.overflow = "";
 
 			// Memory cleanup: clear temporary display data
 			// Note: Keep state.articleData intact for re-summarization and cache lookup
@@ -1121,7 +1121,7 @@ Format exactly as shown:
 			state.articleImages = [];
 
 			// Show the summary button again after closing overlay
-			if (dom.button) dom.button.style.display = 'flex';
+			if (dom.button) dom.button.style.display = "flex";
 		}
 	}
 
@@ -1149,20 +1149,20 @@ Format exactly as shown:
 
 		const errorDiv =
 			/** @type {HTMLDivElement & { _autoDismissTimeout?: ReturnType<typeof setTimeout> }} */ (
-				createElement('div', {
+				createElement("div", {
 					id: CONFIG.ids.error,
-					className: 'error-notification',
+					className: "error-notification",
 				})
 			);
 
-		const messageEl = createElement('div', {
-			className: 'error-message',
+		const messageEl = createElement("div", {
+			className: "error-message",
 			innerText: message,
 		});
 
-		const closeBtn = createElement('button', {
-			className: 'error-close',
-			textContent: '×',
+		const closeBtn = createElement("button", {
+			className: "error-close",
+			textContent: "×",
 			onclick: () => errorDiv.remove(),
 		});
 
@@ -1172,13 +1172,13 @@ Format exactly as shown:
 
 		// Animate in
 		requestAnimationFrame(() => {
-			errorDiv.classList.add('error-active');
+			errorDiv.classList.add("error-active");
 		});
 
 		// Auto-dismiss after duration, but allow manual dismiss (with cleanup)
 		const autoDismissTimeout = setTimeout(() => {
 			if (errorDiv.parentNode) {
-				errorDiv.classList.remove('error-active');
+				errorDiv.classList.remove("error-active");
 				setTimeout(() => {
 					if (errorDiv.parentNode) {
 						errorDiv.remove();
@@ -1245,10 +1245,10 @@ Format exactly as shown:
 			// prior session that no longer matches the freshly-initialized seed list).
 			// Fall back to that service's seed model so the auto-discovery below can
 			// reconcile state.activeModel to the current latest model.
-			const fallbackService = state.activeModel.startsWith('gemini')
-				? 'gemini'
-				: state.activeModel.startsWith('claude')
-					? 'claude'
+			const fallbackService = state.activeModel.startsWith("gemini")
+				? "gemini"
+				: state.activeModel.startsWith("claude")
+					? "claude"
 					: null;
 			if (fallbackService) {
 				state.activeModel = CONFIG.modelGroups[fallbackService].models[0].id;
@@ -1272,10 +1272,10 @@ Format exactly as shown:
 			return null;
 		}
 
-		if (service === 'claude') {
-			await syncLatestModel('claude', 'claude-sonnet', resolveLatestSonnetModel, apiKey);
-		} else if (service === 'gemini') {
-			await syncLatestModel('gemini', 'gemini', resolveLatestGeminiModel, apiKey);
+		if (service === "claude") {
+			await syncLatestModel("claude", "claude-sonnet", resolveLatestSonnetModel, apiKey);
+		} else if (service === "gemini") {
+			await syncLatestModel("gemini", "gemini", resolveLatestGeminiModel, apiKey);
 		}
 
 		const finalModelConfig = getActiveModelConfig() ?? modelConfig;
@@ -1287,7 +1287,7 @@ Format exactly as shown:
 	async function processSummarization() {
 		try {
 			// Hide the summary button during summarization
-			if (dom.button) dom.button.style.display = 'none';
+			if (dom.button) dom.button.style.display = "none";
 
 			// Re-extract on every click (not just at page load) so content revealed after
 			// load — e.g. clicking a "Transcript" tab — is picked up. Readability's own
@@ -1296,17 +1296,17 @@ Format exactly as shown:
 			const articleData = getArticleData() ?? state.articleData;
 			if (!articleData) {
 				showErrorNotification(
-					'Unable to extract article content. Please try selecting text manually.',
+					"Unable to extract article content. Please try selecting text manually.",
 				);
 				// Show button again if validation fails
-				if (dom.button) dom.button.style.display = 'flex';
+				if (dom.button) dom.button.style.display = "flex";
 				return;
 			}
 
 			const validationResult = await validateModelAndApiKey();
 			if (!validationResult) {
 				// Show button again if validation fails
-				if (dom.button) dom.button.style.display = 'flex';
+				if (dom.button) dom.button.style.display = "flex";
 				return;
 			}
 
@@ -1332,14 +1332,14 @@ Format exactly as shown:
 		} catch (/** @type {any} */ error) {
 			handleSummarizationError(error);
 			// Show button again on error
-			if (dom.button) dom.button.style.display = 'flex';
+			if (dom.button) dom.button.style.display = "flex";
 		}
 	}
 
 	// Known-stable text model to fall back to if the auto-discovered "latest flash"
 	// model turns out to be a managed-agent/live variant requiring the Interactions API.
 	/** @type {ModelConfig} */
-	const GEMINI_SAFE_FALLBACK = { id: 'gemini-3.5-flash', name: 'Flash', service: 'gemini' };
+	const GEMINI_SAFE_FALLBACK = { id: "gemini-3.5-flash", name: "Flash", service: "gemini" };
 
 	/** @param {Error} error @param {string} modelId */
 	function annotateModelError(error, modelId) {
@@ -1369,7 +1369,7 @@ Format exactly as shown:
 		// Update state with current article data so Q&A can access it
 		state.articleData = articleData;
 
-		console.info('Summarize with AI: using model', {
+		console.info("Summarize with AI: using model", {
 			id: modelConfig.id,
 			service,
 			name: modelConfig.name,
@@ -1383,13 +1383,13 @@ Format exactly as shown:
 			handleApiResponse(response);
 		} catch (/** @type {any} */ error) {
 			const canFallBack =
-				service === 'gemini' &&
+				service === "gemini" &&
 				modelConfig.id !== GEMINI_SAFE_FALLBACK.id &&
 				/Interactions API/i.test(error.message);
 			if (!canFallBack) throw annotateModelError(error, modelConfig.id);
 
 			console.warn(
-				'Summarize with AI: Auto-discovered Gemini model requires the Interactions API, retrying with',
+				"Summarize with AI: Auto-discovered Gemini model requires the Interactions API, retrying with",
 				GEMINI_SAFE_FALLBACK.id,
 			);
 			await StorageService.clearLatestGeminiCache();
@@ -1421,7 +1421,7 @@ Format exactly as shown:
 	/** @param {Error} error */
 	function handleSummarizationError(error) {
 		const errorMsg = `Error: ${error.message}`;
-		console.error('Summarize with AI:', errorMsg, error);
+		console.error("Summarize with AI:", errorMsg, error);
 		showSummaryOverlay(`<p style="color: ${CONFIG.styles.colors.error};">${errorMsg}</p>`, true);
 		UIHelpers.hideDropdown();
 	}
@@ -1437,32 +1437,32 @@ Format exactly as shown:
 		const requestBody = buildRequestBody(prompt, modelConfig, service, maxTokens);
 
 		// For Gemini, append model ID and API key to URL
-		if (service === 'gemini') {
+		if (service === "gemini") {
 			url = `${url}/${modelConfig.id}:generateContent?key=${apiKey}`;
 		}
 
 		return new Promise((resolve, reject) => {
 			GM.xmlHttpRequest({
-				method: 'POST',
+				method: "POST",
 				url,
 				headers: getHeaders(apiKey, service),
 				data: JSON.stringify(requestBody),
-				responseType: 'json',
+				responseType: "json",
 				timeout: CONFIG.timing.apiRequestTimeout,
 				onload: response => {
 					const responseData = response.response || response.responseText;
 					resolve({
 						status: response.status,
 						data:
-							typeof responseData === 'object' ? responseData : JSON.parse(responseData || '{}'),
+							typeof responseData === "object" ? responseData : JSON.parse(responseData || "{}"),
 						statusText: response.statusText,
 						service, // Pass service for response handling
 					});
 				},
 				onerror: error =>
-					reject(new Error(`Network error: ${error.statusText || 'Failed to connect'}`)),
-				onabort: () => reject(new Error('Request aborted')),
-				ontimeout: () => reject(new Error('Request timed out after 60 seconds')),
+					reject(new Error(`Network error: ${error.statusText || "Failed to connect"}`)),
+				onabort: () => reject(new Error("Request aborted")),
+				ontimeout: () => reject(new Error("Request timed out after 60 seconds")),
 			});
 		});
 	}
@@ -1473,16 +1473,16 @@ Format exactly as shown:
 	function fetchModelsList(url, headers = {}) {
 		return new Promise((resolve, reject) => {
 			GM.xmlHttpRequest({
-				method: 'GET',
+				method: "GET",
 				url,
 				headers,
-				responseType: 'json',
+				responseType: "json",
 				timeout: 10000,
 				onload: response => {
 					const data =
-						typeof response.response === 'object'
+						typeof response.response === "object"
 							? response.response
-							: JSON.parse(response.responseText || '{}');
+							: JSON.parse(response.responseText || "{}");
 					if (response.status < 200 || response.status >= 300) {
 						reject(new Error(`Models API error: ${response.status}`));
 						return;
@@ -1490,26 +1490,26 @@ Format exactly as shown:
 					resolve(data);
 				},
 				onerror: err =>
-					reject(new Error(`Network error: ${err.statusText || 'Failed to connect'}`)),
-				ontimeout: () => reject(new Error('Models API request timed out')),
+					reject(new Error(`Network error: ${err.statusText || "Failed to connect"}`)),
+				ontimeout: () => reject(new Error("Models API request timed out")),
 			});
 		});
 	}
 
 	/** @param {string} apiKey @returns {Promise<string>} */
 	async function fetchLatestSonnetModel(apiKey) {
-		const data = await fetchModelsList('https://api.anthropic.com/v1/models', {
-			'x-api-key': apiKey,
-			'anthropic-version': '2023-06-01',
-			'anthropic-dangerous-direct-browser-access': 'true',
+		const data = await fetchModelsList("https://api.anthropic.com/v1/models", {
+			"x-api-key": apiKey,
+			"anthropic-version": "2023-06-01",
+			"anthropic-dangerous-direct-browser-access": "true",
 		});
 		/** @type {{ id: string }[]} */
 		const sonnetModels = (data.data || [])
-			.filter((/** @type {{ id: string }} */ m) => m.id?.startsWith('claude-sonnet'))
+			.filter((/** @type {{ id: string }} */ m) => m.id?.startsWith("claude-sonnet"))
 			.sort((/** @type {{ id: string }} */ a, /** @type {{ id: string }} */ b) =>
 				b.id.localeCompare(a.id),
 			);
-		if (sonnetModels.length === 0) throw new Error('No Sonnet models found');
+		if (sonnetModels.length === 0) throw new Error("No Sonnet models found");
 		return sonnetModels[0].id;
 	}
 
@@ -1526,16 +1526,16 @@ Format exactly as shown:
 		/** @type {string[]} */
 		const flashModels = (data.models || [])
 			.filter((/** @type {GeminiModel} */ m) => {
-				const id = m.name?.replace('models/', '');
+				const id = m.name?.replace("models/", "");
 				return (
-					id?.includes('flash') &&
+					id?.includes("flash") &&
 					!NON_TEXT_VARIANT.test(id) &&
-					(m.supportedGenerationMethods || []).includes('generateContent')
+					(m.supportedGenerationMethods || []).includes("generateContent")
 				);
 			})
-			.map((/** @type {GeminiModel} */ m) => m.name.replace('models/', ''))
+			.map((/** @type {GeminiModel} */ m) => m.name.replace("models/", ""))
 			.sort((/** @type {string} */ a, /** @type {string} */ b) => b.localeCompare(a));
-		if (flashModels.length === 0) throw new Error('No Gemini Flash models found');
+		if (flashModels.length === 0) throw new Error("No Gemini Flash models found");
 		return flashModels[0];
 	}
 
@@ -1574,9 +1574,9 @@ Format exactly as shown:
 			() => StorageService.getLatestSonnetCache(),
 			id => StorageService.setLatestSonnetCache(id),
 			fetchLatestSonnetModel,
-			'Sonnet',
+			"Sonnet",
 			apiKey,
-			'Sonnet',
+			"Sonnet",
 		);
 	}
 
@@ -1586,9 +1586,9 @@ Format exactly as shown:
 			() => StorageService.getLatestGeminiCache(),
 			id => StorageService.setLatestGeminiCache(id),
 			fetchLatestGeminiFlashModel,
-			'Flash',
+			"Flash",
 			apiKey,
-			'Gemini',
+			"Gemini",
 		);
 	}
 
@@ -1620,18 +1620,18 @@ Format exactly as shown:
 		const { cleanSummary } = REGEX_PATTERNS;
 		const cleaned = htmlString
 			.trim()
-			.replace(cleanSummary.codeFenceOpen, '')
-			.replace(cleanSummary.codeFenceClose, '')
-			.replace(cleanSummary.newlines, ' ')
-			.replace(cleanSummary.multiSpaces, ' ')
+			.replace(cleanSummary.codeFenceOpen, "")
+			.replace(cleanSummary.codeFenceClose, "")
+			.replace(cleanSummary.newlines, " ")
+			.replace(cleanSummary.multiSpaces, " ")
 			.trim()
-			.replace(cleanSummary.styleAttr, '')
-			.replace(cleanSummary.deprecatedAttrs, '')
-			.replace(cleanSummary.fontOpenTag, '<span$1>')
-			.replace(cleanSummary.fontCloseTag, '</span>');
+			.replace(cleanSummary.styleAttr, "")
+			.replace(cleanSummary.deprecatedAttrs, "")
+			.replace(cleanSummary.fontOpenTag, "<span$1>")
+			.replace(cleanSummary.fontCloseTag, "</span>");
 
 		// Only use DOM for final sanitization if needed
-		const tempDiv = document.createElement('div');
+		const tempDiv = document.createElement("div");
 		tempDiv.innerHTML = cleaned;
 		return tempDiv.innerHTML;
 	}
@@ -1647,53 +1647,53 @@ Format exactly as shown:
 
 		if (status < 200 || status >= 300) {
 			const errorDetails =
-				data?.error?.message || data?.message || statusText || 'Unknown API error';
+				data?.error?.message || data?.message || statusText || "Unknown API error";
 			throw new Error(`API Error (${status}): ${errorDetails}`);
 		}
 
-		let rawSummary = '';
+		let rawSummary = "";
 		let finishReason = null;
 		let blockType = null;
 
 		// Extract text based on API provider
-		if (service === 'gemini') {
+		if (service === "gemini") {
 			// Gemini response format: { candidates: [{ content: { parts: [{ text: "..." }] } }] }
 			// Thinking-enabled models may prepend parts with `thought: true` before the answer part.
 			const candidate = data?.candidates?.[0];
 			const parts = candidate?.content?.parts || [];
 			const answerPart = parts.find((/** @type {any} */ p) => p.text && !p.thought) || parts[0];
-			rawSummary = answerPart?.text || '';
+			rawSummary = answerPart?.text || "";
 			finishReason = candidate?.finishReason || null;
-			blockType = answerPart?.thought ? 'thought' : null;
+			blockType = answerPart?.thought ? "thought" : null;
 
 			// Check for finish reason
-			if (finishReason === 'MAX_TOKENS') {
-				console.warn('Summarize with AI: Summary may be incomplete (max token limit reached)');
+			if (finishReason === "MAX_TOKENS") {
+				console.warn("Summarize with AI: Summary may be incomplete (max token limit reached)");
 			}
 		} else {
 			// Claude response format (default)
 			// Extended-thinking responses prepend a `thinking` block before the `text` block.
 			const blocks = data?.content || [];
-			const textBlock = blocks.find((/** @type {any} */ b) => b.type === 'text') || blocks[0];
+			const textBlock = blocks.find((/** @type {any} */ b) => b.type === "text") || blocks[0];
 			finishReason = data?.stop_reason || null;
 			blockType = textBlock?.type || null;
-			if (finishReason === 'max_tokens') {
-				console.warn('Summarize with AI: Summary may be incomplete (max token limit reached)');
+			if (finishReason === "max_tokens") {
+				console.warn("Summarize with AI: Summary may be incomplete (max token limit reached)");
 			}
-			rawSummary = textBlock?.text || '';
+			rawSummary = textBlock?.text || "";
 		}
 
 		if (!rawSummary && !data?.error) {
-			console.error('Summarize with AI: API Response Data:', data);
+			console.error("Summarize with AI: API Response Data:", data);
 			const diagnostics = [
 				finishReason ? `stop reason: ${finishReason}` : null,
-				blockType && blockType !== 'text' ? `block type: ${blockType}` : null,
+				blockType && blockType !== "text" ? `block type: ${blockType}` : null,
 				`status: ${status}`,
 			]
 				.filter(Boolean)
-				.join(', ');
+				.join(", ");
 			throw new Error(
-				`API response did not contain a valid summary (${diagnostics || 'no diagnostic info in response'}).`,
+				`API response did not contain a valid summary (${diagnostics || "no diagnostic info in response"}).`,
 			);
 		}
 
@@ -1705,7 +1705,7 @@ Format exactly as shown:
 		const { rawSummary } = extractSummaryFromResponse(response);
 		const cleanedSummary = cleanSummaryHTML(rawSummary);
 		state.currentSummary = {
-			title: state.articleData?.title || 'Untitled',
+			title: state.articleData?.title || "Untitled",
 			content: cleanedSummary,
 			timestamp: new Date().toISOString(),
 		};
@@ -1732,7 +1732,7 @@ Format exactly as shown:
 		service,
 		maxTokens = CONFIG.limits.defaultMaxTokens,
 	) {
-		if (service === 'gemini') {
+		if (service === "gemini") {
 			// Gemini API format - REST API requires structured content format
 			return {
 				contents: [
@@ -1750,40 +1750,40 @@ Format exactly as shown:
 		// Claude API format (default)
 		return {
 			model: modelConfig.id,
-			messages: [{ role: 'user', content: prompt }],
+			messages: [{ role: "user", content: prompt }],
 			max_tokens: maxTokens,
 		};
 	}
 
 	/** @param {string} apiKey @param {Service} service @returns {Record<string, string>} */
 	function getHeaders(apiKey, service) {
-		if (service === 'gemini') {
+		if (service === "gemini") {
 			// Gemini uses API key in URL, not headers
 			return {
-				'Content-Type': 'application/json',
+				"Content-Type": "application/json",
 			};
 		}
 
 		// Claude headers (default)
 		return {
-			'Content-Type': 'application/json',
-			'x-api-key': apiKey,
-			'anthropic-version': '2023-06-01',
-			'anthropic-dangerous-direct-browser-access': 'true',
+			"Content-Type": "application/json",
+			"x-api-key": apiKey,
+			"anthropic-version": "2023-06-01",
+			"anthropic-dangerous-direct-browser-access": "true",
 		};
 	}
 
 	/** @param {string} service */
 	async function handleApiKeyReset(service) {
 		if (!service || !CONFIG.modelGroups[/** @type {Service} */ (service)]) {
-			console.error('Invalid service provided for API key reset:', service);
-			await ModalService.alert('Invalid service provided.');
+			console.error("Invalid service provided for API key reset:", service);
+			await ModalService.alert("Invalid service provided.");
 			return;
 		}
 		const newApiKey = await ModalService.prompt(
 			`Enter your ${toTitleCase(service)} API key:`,
-			'',
-			'Leave blank to clear existing key',
+			"",
+			"Leave blank to clear existing key",
 		);
 
 		if (newApiKey !== null) {
@@ -1805,21 +1805,21 @@ Format exactly as shown:
 		// Use consolidated regex patterns
 		const { formatQA } = REGEX_PATTERNS;
 
-		formatted = formatted.replace(formatQA.brackets, '<p><strong>$1</strong></p>');
+		formatted = formatted.replace(formatQA.brackets, "<p><strong>$1</strong></p>");
 
 		// Add line break BEFORE any bold label ending with colon (like "**Actionable Insights:**")
 		// This ensures all section headers appear on their own line
 		// Look for sentence ending (. ! ?) or word character followed by space(s) and **Text:**
-		formatted = formatted.replace(/([.!?a-z])\s+(\*\*[A-Z][^*]+:\*\*)/g, '$1\n$2');
+		formatted = formatted.replace(/([.!?a-z])\s+(\*\*[A-Z][^*]+:\*\*)/g, "$1\n$2");
 
 		// Convert **bold** to <strong>
-		formatted = formatted.replace(formatQA.bold, '<strong>$1</strong>');
+		formatted = formatted.replace(formatQA.bold, "<strong>$1</strong>");
 
 		// Remove excessive blank lines (more than 2 consecutive newlines)
-		formatted = formatted.replace(/\n{3,}/g, '\n\n');
+		formatted = formatted.replace(/\n{3,}/g, "\n\n");
 
 		// Split into lines for processing
-		const lines = formatted.split('\n');
+		const lines = formatted.split("\n");
 		const result = [];
 		let inList = false;
 		let lastWasSectionHeader = false;
@@ -1834,7 +1834,7 @@ Format exactly as shown:
 				}
 				// Close list if we were in one
 				if (inList) {
-					result.push('</ul>');
+					result.push("</ul>");
 					inList = false;
 				}
 				continue;
@@ -1843,26 +1843,26 @@ Format exactly as shown:
 			// Check if this is a numbered list item
 			if (formatQA.numberedList.test(trimmedLine)) {
 				if (!inList) {
-					result.push('<ul>');
+					result.push("<ul>");
 					inList = true;
 				}
 				// Remove the number and add as list item
-				const content = trimmedLine.replace(formatQA.numberedListRemove, '');
+				const content = trimmedLine.replace(formatQA.numberedListRemove, "");
 				result.push(`<li>${content}</li>`);
 				lastWasSectionHeader = false;
 			}
 			// Check if line is a section header (contains colon before closing tags)
 			// Matches: <strong>Text:</strong>, <p><strong>Text:</strong></p>, or <strong>Text:</strong></p>
 			else if (
-				trimmedLine.includes(':') &&
+				trimmedLine.includes(":") &&
 				trimmedLine.match(/^(<p>)?<strong>[^<]+:<\/strong>(<\/p>)?$/)
 			) {
 				if (inList) {
-					result.push('</ul>');
+					result.push("</ul>");
 					inList = false;
 				}
 				// Wrap standalone <strong> headers in paragraph tags
-				if (!trimmedLine.startsWith('<p>')) {
+				if (!trimmedLine.startsWith("<p>")) {
 					result.push(`<p>${trimmedLine}</p>`);
 				} else {
 					result.push(trimmedLine);
@@ -1870,9 +1870,9 @@ Format exactly as shown:
 				lastWasSectionHeader = true;
 			}
 			// Check if line already has HTML tags (but not section headers)
-			else if (trimmedLine.startsWith('<p>') || trimmedLine.startsWith('<strong>')) {
+			else if (trimmedLine.startsWith("<p>") || trimmedLine.startsWith("<strong>")) {
 				if (inList) {
-					result.push('</ul>');
+					result.push("</ul>");
 					inList = false;
 				}
 				result.push(trimmedLine);
@@ -1881,7 +1881,7 @@ Format exactly as shown:
 			// Regular paragraph
 			else {
 				if (inList) {
-					result.push('</ul>');
+					result.push("</ul>");
 					inList = false;
 				}
 				result.push(`<p>${trimmedLine}</p>`);
@@ -1891,10 +1891,10 @@ Format exactly as shown:
 
 		// Close any open list
 		if (inList) {
-			result.push('</ul>');
+			result.push("</ul>");
 		}
 
-		return result.join('\n');
+		return result.join("\n");
 	}
 
 	async function handleAskQuestion() {
@@ -1904,12 +1904,12 @@ Format exactly as shown:
 
 		const question = questionInput.value.trim();
 		if (!question) {
-			showErrorNotification('Please enter a question.');
+			showErrorNotification("Please enter a question.");
 			return;
 		}
 
 		if (!state.articleData) {
-			showErrorNotification('No article content available.');
+			showErrorNotification("No article content available.");
 			return;
 		}
 
@@ -1917,13 +1917,13 @@ Format exactly as shown:
 		questionInput.disabled = true;
 		if (askBtn) {
 			askBtn.disabled = true;
-			askBtn.textContent = 'Thinking...';
+			askBtn.textContent = "Thinking...";
 		}
 
 		try {
 			const validationResult = await validateModelAndApiKey();
 			if (!validationResult) {
-				throw new Error('Model or API key validation failed');
+				throw new Error("Model or API key validation failed");
 			}
 
 			const { modelConfig, apiKey, service } = validationResult;
@@ -1959,23 +1959,23 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
       `;
 
 			// Clear input
-			questionInput.value = '';
+			questionInput.value = "";
 		} catch (/** @type {any} */ error) {
-			console.error('Ask question failed:', error);
+			console.error("Ask question failed:", error);
 			answerContainer.innerHTML = `<p style="color: ${CONFIG.styles.colors.error};">Error: ${escapeHtml(error.message)}</p>`;
 		} finally {
 			// Re-enable input
 			questionInput.disabled = false;
 			if (askBtn) {
 				askBtn.disabled = false;
-				askBtn.textContent = 'Ask';
+				askBtn.textContent = "Ask";
 			}
 		}
 	}
 
 	/** @param {string} text */
 	function escapeHtml(text) {
-		const div = document.createElement('div');
+		const div = document.createElement("div");
 		div.textContent = text;
 		return div.innerHTML;
 	}
@@ -1993,7 +1993,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		const img = dom.lightboxElements?.img;
 		if (!img) return;
 		img.style.transform = `translate(${lightboxZoom.x}px, ${lightboxZoom.y}px) scale(${lightboxZoom.scale})`;
-		img.style.cursor = lightboxZoom.scale > 1 ? 'grab' : 'zoom-in';
+		img.style.cursor = lightboxZoom.scale > 1 ? "grab" : "zoom-in";
 	}
 
 	function resetLightboxZoom() {
@@ -2021,13 +2021,13 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		}
 
 		updateLightboxImage();
-		if (dom.lightbox) dom.lightbox.style.display = 'flex';
-		document.body.style.overflow = 'hidden';
+		if (dom.lightbox) dom.lightbox.style.display = "flex";
+		document.body.style.overflow = "hidden";
 	}
 
 	function closeLightbox() {
 		if (dom.lightbox) {
-			document.body.style.overflow = '';
+			document.body.style.overflow = "";
 
 			// Cleanup event listeners to prevent memory leaks
 			if (dom.lightboxCleanup) {
@@ -2046,62 +2046,62 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 	}
 
 	function createLightbox() {
-		const lightbox = createElement('div', {
-			className: 'lightbox-overlay',
+		const lightbox = createElement("div", {
+			className: "lightbox-overlay",
 		});
 		dom.lightbox = lightbox;
 
 		// Create content container
-		const lightboxContent = createElement('div', {
-			className: 'lightbox-content',
+		const lightboxContent = createElement("div", {
+			className: "lightbox-content",
 		});
 
-		const img = createElement('img', {
-			className: 'lightbox-image',
-			alt: 'Full size image',
-			title: 'Scroll or pinch to zoom, drag to pan, double-click/tap to reset',
+		const img = createElement("img", {
+			className: "lightbox-image",
+			alt: "Full size image",
+			title: "Scroll or pinch to zoom, drag to pan, double-click/tap to reset",
 		});
 
-		const iframe = createElement('iframe', {
-			className: 'lightbox-iframe',
-			frameborder: '0',
-			scrolling: 'no',
-			style: 'display: none;',
+		const iframe = createElement("iframe", {
+			className: "lightbox-iframe",
+			frameborder: "0",
+			scrolling: "no",
+			style: "display: none;",
 		});
 
 		lightboxContent.appendChild(img);
 		lightboxContent.appendChild(iframe);
 
 		// Create thumbnail strip
-		const thumbnailStrip = createElement('div', {
-			className: 'lightbox-thumbnails',
+		const thumbnailStrip = createElement("div", {
+			className: "lightbox-thumbnails",
 		});
 
 		// Create menu bar at bottom (similar to summary overlay)
-		const menuBar = createElement('div', {
-			className: 'lightbox-menubar',
+		const menuBar = createElement("div", {
+			className: "lightbox-menubar",
 		});
 
-		const prevBtn = createElement('button', {
-			className: 'menubar-button lightbox-prev',
-			textContent: '← Prev',
+		const prevBtn = createElement("button", {
+			className: "menubar-button lightbox-prev",
+			textContent: "← Prev",
 			onclick: () => navigateLightbox(-1),
 		});
 
-		const counter = createElement('div', {
-			className: 'lightbox-counter',
+		const counter = createElement("div", {
+			className: "lightbox-counter",
 		});
 
-		const nextBtn = createElement('button', {
-			className: 'menubar-button lightbox-next',
-			textContent: 'Next →',
+		const nextBtn = createElement("button", {
+			className: "menubar-button lightbox-next",
+			textContent: "Next →",
 			onclick: () => navigateLightbox(1),
 		});
 
-		const closeBtn = createElement('button', {
-			className: 'menubar-button',
-			textContent: 'Close',
-			title: 'Close (Esc)',
+		const closeBtn = createElement("button", {
+			className: "menubar-button",
+			textContent: "Close",
+			title: "Close (Esc)",
 			onclick: closeLightbox,
 		});
 
@@ -2135,10 +2135,10 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 				closeLightbox();
 			}
 		};
-		lightbox.addEventListener('click', overlayClickHandler);
+		lightbox.addEventListener("click", overlayClickHandler);
 
 		// Keyboard navigation
-		document.addEventListener('keydown', handleLightboxKeyboard);
+		document.addEventListener("keydown", handleLightboxKeyboard);
 
 		// Touch/swipe/pan/pinch-zoom support
 		let touchStartX = 0;
@@ -2215,9 +2215,9 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			}
 		};
 
-		lightboxContent.addEventListener('touchstart', touchStartHandler, { passive: true });
-		lightboxContent.addEventListener('touchmove', touchMoveHandler, { passive: false });
-		lightboxContent.addEventListener('touchend', touchEndHandler, { passive: true });
+		lightboxContent.addEventListener("touchstart", touchStartHandler, { passive: true });
+		lightboxContent.addEventListener("touchmove", touchMoveHandler, { passive: false });
+		lightboxContent.addEventListener("touchend", touchEndHandler, { passive: true });
 
 		function handleSwipe() {
 			const swipeThreshold = 50;
@@ -2253,7 +2253,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			isDragging = true;
 			dragStart = { x: e.clientX, y: e.clientY };
 			dragPanStart = { x: lightboxZoom.x, y: lightboxZoom.y };
-			img.style.cursor = 'grabbing';
+			img.style.cursor = "grabbing";
 			e.preventDefault();
 		};
 		/** @param {MouseEvent} e */
@@ -2268,24 +2268,24 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			applyLightboxZoomTransform();
 		};
 
-		img.addEventListener('wheel', wheelHandler, { passive: false });
-		img.addEventListener('dblclick', dblClickHandler);
-		img.addEventListener('mousedown', mouseDownHandler);
-		window.addEventListener('mousemove', mouseMoveHandler);
-		window.addEventListener('mouseup', mouseUpHandler);
+		img.addEventListener("wheel", wheelHandler, { passive: false });
+		img.addEventListener("dblclick", dblClickHandler);
+		img.addEventListener("mousedown", mouseDownHandler);
+		window.addEventListener("mousemove", mouseMoveHandler);
+		window.addEventListener("mouseup", mouseUpHandler);
 
 		// Store cleanup function to remove all event listeners
 		dom.lightboxCleanup = () => {
-			document.removeEventListener('keydown', handleLightboxKeyboard);
-			lightbox.removeEventListener('click', overlayClickHandler);
-			lightboxContent.removeEventListener('touchstart', touchStartHandler);
-			lightboxContent.removeEventListener('touchmove', touchMoveHandler);
-			lightboxContent.removeEventListener('touchend', touchEndHandler);
-			img.removeEventListener('wheel', wheelHandler);
-			img.removeEventListener('dblclick', dblClickHandler);
-			img.removeEventListener('mousedown', mouseDownHandler);
-			window.removeEventListener('mousemove', mouseMoveHandler);
-			window.removeEventListener('mouseup', mouseUpHandler);
+			document.removeEventListener("keydown", handleLightboxKeyboard);
+			lightbox.removeEventListener("click", overlayClickHandler);
+			lightboxContent.removeEventListener("touchstart", touchStartHandler);
+			lightboxContent.removeEventListener("touchmove", touchMoveHandler);
+			lightboxContent.removeEventListener("touchend", touchEndHandler);
+			img.removeEventListener("wheel", wheelHandler);
+			img.removeEventListener("dblclick", dblClickHandler);
+			img.removeEventListener("mousedown", mouseDownHandler);
+			window.removeEventListener("mousemove", mouseMoveHandler);
+			window.removeEventListener("mouseup", mouseUpHandler);
 		};
 	}
 
@@ -2299,16 +2299,16 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		counter.textContent = `${currentImageIndex + 1} / ${state.articleImages.length}`;
 
 		// Show image or iframe based on type
-		if (currentItem.type === 'iframe') {
-			img.style.display = 'none';
-			iframe.style.display = 'block';
+		if (currentItem.type === "iframe") {
+			img.style.display = "none";
+			iframe.style.display = "block";
 			iframe.src = currentItem.src;
-			iframe.title = currentItem.alt || 'Interactive visualization';
+			iframe.title = currentItem.alt || "Interactive visualization";
 		} else {
-			iframe.style.display = 'none';
-			img.style.display = 'block';
+			iframe.style.display = "none";
+			img.style.display = "block";
 			img.src = currentItem.src;
-			img.alt = currentItem.alt || 'Article image';
+			img.alt = currentItem.alt || "Article image";
 		}
 
 		// Disable/enable buttons at boundaries
@@ -2316,19 +2316,19 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		nextBtn.disabled = currentImageIndex === state.articleImages.length - 1;
 
 		// Update active thumbnail highlight
-		const thumbnails = thumbnailStrip.querySelectorAll('.lightbox-thumbnail-item');
+		const thumbnails = thumbnailStrip.querySelectorAll(".lightbox-thumbnail-item");
 		thumbnails.forEach((thumb, idx) => {
 			if (idx === currentImageIndex) {
-				thumb.classList.add('active');
+				thumb.classList.add("active");
 			} else {
-				thumb.classList.remove('active');
+				thumb.classList.remove("active");
 			}
 		});
 
 		// Scroll active thumbnail into view
 		const activeThumb = thumbnails[currentImageIndex];
 		if (activeThumb) {
-			activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+			activeThumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
 		}
 	}
 
@@ -2345,33 +2345,33 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		if (!dom.lightboxElements || !dom.lightboxElements.thumbnailStrip) return;
 
 		const { thumbnailStrip } = dom.lightboxElements;
-		thumbnailStrip.innerHTML = '';
+		thumbnailStrip.innerHTML = "";
 
 		state.articleImages.forEach((item, index) => {
-			const thumbItem = createElement('div', {
-				className: 'lightbox-thumbnail-item',
+			const thumbItem = createElement("div", {
+				className: "lightbox-thumbnail-item",
 			});
 
-			const isIframe = item.type === 'iframe';
+			const isIframe = item.type === "iframe";
 
 			// Create thumbnail image or iframe indicator
 			let thumbContent;
 			if (isIframe) {
-				thumbContent = createElement('div', {
-					className: 'lightbox-thumbnail-iframe-indicator',
-					textContent: '🖼️',
-					title: 'Interactive content',
+				thumbContent = createElement("div", {
+					className: "lightbox-thumbnail-iframe-indicator",
+					textContent: "🖼️",
+					title: "Interactive content",
 				});
 			} else {
-				thumbContent = createElement('img', {
-					className: 'lightbox-thumbnail-img',
+				thumbContent = createElement("img", {
+					className: "lightbox-thumbnail-img",
 					src: item.src,
 					alt: item.alt || `Image ${index + 1}`,
 				});
 			}
 
 			// Make thumbnail clickable to navigate
-			thumbContent.addEventListener('click', () => {
+			thumbContent.addEventListener("click", () => {
 				currentImageIndex = index;
 				updateLightboxImage();
 			});
@@ -2383,18 +2383,18 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
 	/** @param {KeyboardEvent} e */
 	function handleLightboxKeyboard(e) {
-		if (!dom.lightbox || dom.lightbox.style.display === 'none') return;
+		if (!dom.lightbox || dom.lightbox.style.display === "none") return;
 
 		switch (e.key) {
-			case 'Escape':
+			case "Escape":
 				e.preventDefault();
 				closeLightbox();
 				break;
-			case 'ArrowLeft':
+			case "ArrowLeft":
 				e.preventDefault();
 				navigateLightbox(-1);
 				break;
-			case 'ArrowRight':
+			case "ArrowRight":
 				e.preventDefault();
 				navigateLightbox(1);
 				break;
@@ -2404,19 +2404,19 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 	// --- Event Handlers & Utilities ---
 	/** @param {KeyboardEvent} e */
 	function handleKeyPress(e) {
-		if (e.altKey && e.code === 'KeyS' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+		if (e.altKey && e.code === "KeyS" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
 			e.preventDefault();
 			if (dom.button && !document.activeElement?.closest(CONFIG.selectors.input)) {
 				processSummarization();
 			}
 		}
-		if (e.key === 'Escape') {
+		if (e.key === "Escape") {
 			if (dom.overlay) {
 				e.preventDefault();
 				closeOverlay();
-			} else if (dom.dropdown && dom.dropdown.style.display !== 'none') {
+			} else if (dom.dropdown && dom.dropdown.style.display !== "none") {
 				e.preventDefault();
-				dom.dropdown.style.display = 'none';
+				dom.dropdown.style.display = "none";
 			}
 		}
 	}
@@ -2425,34 +2425,34 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		/** @type {ReturnType<typeof setTimeout> | null} */
 		let focusOutTimer = null;
 
-		document.addEventListener('focusin', event => {
+		document.addEventListener("focusin", event => {
 			const target = /** @type {Element | null} */ (event.target);
 			// Exclude modal inputs from hiding the button
-			const isModalInput = target?.closest('.custom-modal-overlay');
+			const isModalInput = target?.closest(".custom-modal-overlay");
 			if (target?.closest(CONFIG.selectors.input) && !isModalInput) {
 				if (focusOutTimer) {
 					clearTimeout(focusOutTimer);
 					focusOutTimer = null;
 				}
-				if (dom.button) dom.button.style.display = 'none';
-				if (dom.dropdown) dom.dropdown.style.display = 'none';
+				if (dom.button) dom.button.style.display = "none";
+				if (dom.dropdown) dom.dropdown.style.display = "none";
 			}
 		});
 
 		document.addEventListener(
-			'focusout',
+			"focusout",
 			event => {
 				const target = /** @type {Element | null} */ (event.target);
 				const relatedTarget = /** @type {Element | null} */ (event.relatedTarget);
 				// Exclude modal inputs from the restore logic
-				const isModalInput = target?.closest('.custom-modal-overlay');
+				const isModalInput = target?.closest(".custom-modal-overlay");
 				const isLeavingInput = target?.closest(CONFIG.selectors.input) && !isModalInput;
 				const isEnteringInput = relatedTarget?.closest(CONFIG.selectors.input);
 
 				if (isLeavingInput && !isEnteringInput && state.articleData) {
 					focusOutTimer = setTimeout(() => {
 						if (!document.activeElement?.closest(CONFIG.selectors.input)) {
-							if (dom.button) dom.button.style.display = 'flex';
+							if (dom.button) dom.button.style.display = "flex";
 						}
 						focusOutTimer = null;
 					}, CONFIG.timing.focusDebounceDelay);
@@ -2467,10 +2467,10 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
 		// Add viewport meta tag to prevent zooming on mobile
 		if (!document.querySelector('meta[name="viewport"][content*="user-scalable=no"]')) {
-			const viewport = document.createElement('meta');
-			viewport.name = 'viewport';
+			const viewport = document.createElement("meta");
+			viewport.name = "viewport";
 			viewport.content =
-				'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+				"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no";
 			document.head.appendChild(viewport);
 		}
 
@@ -3519,7 +3519,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 	// --- Initialization ---
 	// `module` only exists when Vitest imports this file for the pure-helper tests below;
 	// it's always undefined in a real userscript/browser context, where init must run.
-	if (typeof module === 'undefined') {
+	if (typeof module === "undefined") {
 		initialize();
 	} else {
 		module.exports = {

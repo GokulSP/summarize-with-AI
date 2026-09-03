@@ -20,7 +20,9 @@ tasks:
     deps: [typecheck:js]
   typecheck:js:
     cmds:
-      - pnpm exec tsc -p jsconfig.json
+      # Bare `tsc --checkJs --noEmit` only auto-discovers tsconfig.json, never
+      # jsconfig.json, so -p points it there explicitly.
+      - pnpm exec tsc -p jsconfig.json --noEmit
 
   test:
     deps: [test:js]
