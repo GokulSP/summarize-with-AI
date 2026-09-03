@@ -1,6 +1,12 @@
 version: "3"
 
 tasks:
+  setup:
+    desc: Install dependencies and git hooks
+    cmds:
+      - pnpm install
+      - lefthook install
+
   lint:
     deps: [lint:js, lint:md]
   lint:js:
@@ -21,6 +27,10 @@ tasks:
   test:js:
     cmds:
       - pnpm exec vitest run
+
+  security:secrets:
+    cmds:
+      - gitleaks protect --staged -v
 
   audit:js:
     cmds:

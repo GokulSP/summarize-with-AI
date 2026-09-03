@@ -11,6 +11,8 @@ pre-commit:
     metadata:
       glob: "Summarize with AI.user.js"
       run: task sync:metadata
+    secrets:
+      run: task security:secrets
 
 commit-msg:
   commands:

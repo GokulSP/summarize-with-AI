@@ -21,10 +21,10 @@ A userscript that summarizes articles with Claude or Gemini in one click, with a
 ## Development
 
 ```bash
-pnpm install    # sets up lefthook git hooks too
-pnpm lint       # biome check
-pnpm typecheck  # tsc --checkJs
-pnpm test       # vitest
+task setup      # pnpm install + lefthook install
+task lint       # biome check
+task typecheck  # tsc --checkJs
+task test       # vitest
 ```
 
 All code lives in `Summarize with AI.user.js`; bump `@version` in its header on every change (lefthook syncs `.meta.js` and `package.json` automatically on commit).

@@ -22,9 +22,9 @@
 	},
 	"scripts": {
 		"prepare": "lefthook install",
-		"lint": "biome check .",
-		"format": "biome check --write .",
-		"typecheck": "tsc -p jsconfig.json",
-		"test": "vitest run"
+		"lint": "task lint:js",
+		"format": "task lint:js",
+		"typecheck": "task typecheck:js",
+		"test": "task test:js"
 	}
 }
