@@ -11,6 +11,7 @@ pre-commit:
     metadata:
       glob: "Summarize with AI.user.js"
       run: task sync:metadata
+      stage_fixed: true
     secrets:
       run: task security:secrets
 
