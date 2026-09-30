@@ -56,7 +56,11 @@ tasks:
       - pnpm update --latest
       - uv cache clean rumdl gitfluff
       - uv self update
-      - winget upgrade --all
+      # winget often exits non-zero even when every package installed fine
+      # (e.g. "N package(s) have version numbers that cannot be determined")
+      # - don't let that abort the checks below.
+      - cmd: winget upgrade --all
+        ignore_error: true
       - task: lint
       - task: typecheck
       - task: test
