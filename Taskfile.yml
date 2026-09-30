@@ -49,3 +49,15 @@ tasks:
   sync:metadata:
     cmds:
       - node scripts/sync-metadata.js
+
+  update:
+    desc: Monthly. Upgrade locked deps, uvx cache and system binaries, then re-run checks
+    cmds:
+      - pnpm update --latest
+      - uv cache clean rumdl gitfluff
+      - uv self update
+      - winget upgrade --all
+      - task: lint
+      - task: typecheck
+      - task: test
+      - task: audit:js
