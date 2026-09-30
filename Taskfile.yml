@@ -14,7 +14,7 @@ tasks:
       - pnpm exec biome check --write {{.CLI_ARGS}}
   lint:md:
     cmds:
-      - pnpm exec markdownlint-cli2 --fix {{.CLI_ARGS}}
+      - uvx rumdl check --fix {{.CLI_ARGS}}
 
   typecheck:
     deps: [typecheck:js]

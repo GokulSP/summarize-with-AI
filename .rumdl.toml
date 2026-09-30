@@ -1,0 +1,7 @@
+# Prose docs use long, unwrapped lines by design; inline HTML is intentional.
+[global]
+disable = ["MD013", "MD033"]
+include = ["README.md", "CLAUDE.md"]
+
+[MD024]
+siblings_only = true
