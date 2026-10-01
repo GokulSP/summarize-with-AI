@@ -6,5 +6,6 @@
 		"strict": true,
 		"skipLibCheck": true,
 		"types": ["tampermonkey"]
-	}
+	},
+	"exclude": ["node_modules", "coverage"]
 }

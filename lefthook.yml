@@ -22,7 +22,11 @@ commit-msg:
 
 pre-push:
   commands:
-    check-lockfile-js:
+    lockfile-js:
       run: task check:lockfile-js
     audit-js:
       run: task audit:js
+    typecheck:
+      run: task typecheck
+    test:
+      run: task test

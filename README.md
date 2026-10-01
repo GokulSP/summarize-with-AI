@@ -24,8 +24,12 @@ A userscript that summarizes articles with Claude or Gemini in one click, with a
 task setup      # pnpm install + lefthook install
 task lint       # biome check
 task typecheck  # tsc --checkJs
-task test       # vitest
+task test       # vitest, failing under the coverage floors
+task audit      # pnpm audit + semgrep
+task ci         # every gate on every file plus a full-history secret scan
 ```
+
+`Summarize with AI.ui.test.js` runs the real userscript in a happy-dom page with only the userscript manager (`GM.*`) and the `@require`d Readability stood in, then drives it like a user: clicks, long presses, keys, touches.
 
 All code lives in `Summarize with AI.user.js`; bump `@version` in its header on every change (lefthook syncs `.meta.js` and `package.json` automatically on commit).
 

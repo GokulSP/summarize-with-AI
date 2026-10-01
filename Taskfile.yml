@@ -28,20 +28,34 @@ tasks:
     deps: [test:js]
   test:js:
     cmds:
-      - pnpm exec vitest run
+      # Coverage is measured on the userscript itself; text-only so no report
+      # folder lands in the repo. Branches ratchet at 76, not the usual 80: V8
+      # counts every ?. and ?? as a branch, and what's left uncovered is defensive
+      # null guards no UI path reaches. Raise it as coverage grows, never lower it.
+      - >-
+        pnpm exec vitest run --coverage --coverage.include="*.user.js"
+        --coverage.reporter=text --coverage.thresholds.lines=80
+        --coverage.thresholds.branches=76
 
-  security:secrets:
-    cmds:
-      - gitleaks protect --staged -v
-
+  audit:
+    deps: [audit:js]
   audit:js:
     cmds:
       - pnpm audit
+      - uvx semgrep scan --config p/javascript --config p/nodejsscan --metrics off --error
 
+  check:lockfile:
+    deps: [check:lockfile-js]
   check:lockfile-js:
     cmds:
       - pnpm install --frozen-lockfile
 
+  security:secrets:
+    cmds:
+      - gitleaks git --pre-commit --staged -v
+  security:history:
+    cmds:
+      - gitleaks git -v
   check:commit-msg:
     cmds:
       - uvx gitfluff lint {{.CLI_ARGS}} --write
@@ -54,14 +68,24 @@ tasks:
     desc: Monthly. Upgrade locked deps, uvx cache and system binaries, then re-run checks
     cmds:
       - pnpm update --latest
-      - uv cache clean rumdl gitfluff
+      - pnpm exec knip
+      - uv cache clean rumdl gitfluff semgrep
       - uv self update
-      # winget often exits non-zero even when every package installed fine
-      # (e.g. "N package(s) have version numbers that cannot be determined")
-      # - don't let that abort the checks below.
+      # winget often exits non-zero even when every package upgraded fine
       - cmd: winget upgrade --all
         ignore_error: true
       - task: lint
       - task: typecheck
       - task: test
-      - task: audit:js
+      - task: audit
+
+  ci:
+    desc: Every gate on every file and the whole history. Run after cloning and before a release
+    cmds:
+      - task: check:lockfile
+      - task: setup
+      - task: lint
+      - task: typecheck
+      - task: test
+      - task: audit
+      - task: security:history

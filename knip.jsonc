@@ -1,0 +1,8 @@
+{
+	"$schema": "https://unpkg.com/knip@6/schema.json",
+	// The userscript and its update-check header are loaded by Tampermonkey/Violentmonkey
+	// from GitHub Pages, never imported, so knip can't see them as used without this.
+	"entry": ["Summarize with AI.user.js", "Summarize with AI.meta.js", "scripts/*.js"],
+	// `task` is the system-installed Task runner (winget), not an npm package.
+	"ignoreBinaries": ["task"]
+}

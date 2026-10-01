@@ -37,4 +37,4 @@ credentials.json
 
 # Git stuff
 *.orig
-*.rej
+*.rejcoverage/

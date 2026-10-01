@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/summarize-with-AI
-// @version     2026.09.01.01
+// @version     2026.10.01.01
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -2337,15 +2337,18 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		const touchEndHandler = e => {
 			if (e.touches.length > 0) return;
 
-			const wasPinchOrPan = isPinching || isPanning;
+			const wasPinch = isPinching;
+			const wasPan = isPanning;
 			isPinching = false;
 			isPanning = false;
-			if (wasPinchOrPan) return;
+			if (wasPinch) return;
 
 			const touch = e.changedTouches[0];
 			touchEndX = touch.screenX;
 			const movedDistance = Math.hypot(touch.screenX - touchStartX, touch.screenY - touchStartY);
 
+			// A one-finger touch while zoomed in starts a pan, but one that barely moved is
+			// still a tap — otherwise double-tap could never reset the zoom.
 			if (movedDistance < 10) {
 				// Tap - check for double-tap to toggle zoom
 				const now = Date.now();
@@ -2355,7 +2358,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 				} else {
 					lastTapTime = now;
 				}
-			} else if (lightboxZoom.scale <= 1) {
+			} else if (!wasPan && lightboxZoom.scale <= 1) {
 				handleSwipe();
 			}
 		};
@@ -2573,7 +2576,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		document.addEventListener("focusin", event => {
 			const target = /** @type {Element | null} */ (event.target);
 			// Exclude modal inputs from hiding the button
-			const isModalInput = target?.closest(".custom-modal-overlay");
+			const isModalInput = target?.closest(".sai-modal-overlay");
 			if (target?.closest(CONFIG.selectors.input) && !isModalInput) {
 				if (focusOutTimer) {
 					clearTimeout(focusOutTimer);
@@ -2590,7 +2593,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 				const target = /** @type {Element | null} */ (event.target);
 				const relatedTarget = /** @type {Element | null} */ (event.relatedTarget);
 				// Exclude modal inputs from the restore logic
-				const isModalInput = target?.closest(".custom-modal-overlay");
+				const isModalInput = target?.closest(".sai-modal-overlay");
 				const isLeavingInput = target?.closest(CONFIG.selectors.input) && !isModalInput;
 				const isEnteringInput = relatedTarget?.closest(CONFIG.selectors.input);
 

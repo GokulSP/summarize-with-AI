@@ -2,7 +2,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const USER_JS = "Summarize with AI.user.js";
+const SCRIPT_FILE = "Summarize with AI.user.js";
 const META_JS = "Summarize with AI.meta.js";
 const PACKAGE_JSON = "package.json";
 
@@ -14,7 +14,7 @@ const isTagLine = l => l.type === "tag";
 function formatUserscriptMetadata() {
 	console.log("Formatting userscript metadata...");
 
-	const content = readFileSync(USER_JS, "utf-8");
+	const content = readFileSync(SCRIPT_FILE, "utf-8");
 	const metaStart = content.indexOf("// ==UserScript==");
 	const metaEnd = content.indexOf("// ==/UserScript==");
 
@@ -61,8 +61,8 @@ function formatUserscriptMetadata() {
 	const formattedMetadata = formattedLines.join("\n");
 
 	if (formattedMetadata !== metadata) {
-		writeFileSync(USER_JS, beforeMeta + formattedMetadata + afterMeta, "utf-8");
-		execSync(`git add "${USER_JS}"`, { stdio: "pipe" });
+		writeFileSync(SCRIPT_FILE, beforeMeta + formattedMetadata + afterMeta, "utf-8");
+		execSync(`git add "${SCRIPT_FILE}"`, { stdio: "pipe" });
 		console.log("✓ Metadata formatted and aligned");
 	} else {
 		console.log("  Metadata already aligned");
@@ -72,7 +72,7 @@ function formatUserscriptMetadata() {
 function syncMetadata() {
 	console.log(`Syncing metadata to ${META_JS}...`);
 
-	const content = readFileSync(USER_JS, "utf-8");
+	const content = readFileSync(SCRIPT_FILE, "utf-8");
 	const metaStart = content.indexOf("// ==UserScript==");
 	const metaEnd = content.indexOf("// ==/UserScript==");
 
