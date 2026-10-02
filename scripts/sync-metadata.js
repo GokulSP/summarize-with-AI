@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const SCRIPT_FILE = "Summarize with AI.user.js";
@@ -62,7 +62,7 @@ function formatUserscriptMetadata() {
 
 	if (formattedMetadata !== metadata) {
 		writeFileSync(SCRIPT_FILE, beforeMeta + formattedMetadata + afterMeta, "utf-8");
-		execSync(`git add "${SCRIPT_FILE}"`, { stdio: "pipe" });
+		execFileSync("git", ["add", SCRIPT_FILE], { stdio: "pipe" });
 		console.log("✓ Metadata formatted and aligned");
 	} else {
 		console.log("  Metadata already aligned");
@@ -85,7 +85,7 @@ function syncMetadata() {
 	const version = metadata.match(/@version\s+(.+)/)?.[1]?.trim();
 	console.log(`✓ Metadata synced to ${META_JS} (v${version ?? "unknown"})`);
 
-	execSync(`git add "${META_JS}"`, { stdio: "pipe" });
+	execFileSync("git", ["add", META_JS], { stdio: "pipe" });
 	return version;
 }
 
@@ -98,7 +98,7 @@ function syncPackageVersion(version) {
 
 	pkg.version = version;
 	writeFileSync(PACKAGE_JSON, `${JSON.stringify(pkg, null, "\t")}\n`, "utf-8");
-	execSync(`git add "${PACKAGE_JSON}"`, { stdio: "pipe" });
+	execFileSync("git", ["add", PACKAGE_JSON], { stdio: "pipe" });
 	console.log(`✓ package.json version synced to ${version}`);
 }
 

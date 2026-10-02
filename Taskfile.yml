@@ -42,7 +42,9 @@ tasks:
   audit:js:
     cmds:
       - pnpm audit
-      - uvx semgrep scan --config p/javascript --config p/nodejsscan --metrics off --error
+      # Shared ruleset, not a per-repo one. ast-grep replaced semgrep because
+      # semgrep ships no Windows binary, so that gate never once ran.
+      - pnpm exec ast-grep scan -c ../dev-environment/ast-grep/sgconfig.yml .
 
   check:lockfile:
     deps: [check:lockfile-js]
