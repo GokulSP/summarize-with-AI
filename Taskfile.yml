@@ -20,18 +20,12 @@ tasks:
     deps: [typecheck:js]
   typecheck:js:
     cmds:
-      # Bare `tsc --checkJs --noEmit` only auto-discovers tsconfig.json, never
-      # jsconfig.json, so -p points it there explicitly.
       - pnpm exec tsc -p jsconfig.json --noEmit
 
   test:
     deps: [test:js]
   test:js:
     cmds:
-      # Coverage is measured on the userscript itself; text-only so no report
-      # folder lands in the repo. Branches ratchet at 76, not the usual 80: V8
-      # counts every ?. and ?? as a branch, and what's left uncovered is defensive
-      # null guards no UI path reaches. Raise it as coverage grows, never lower it.
       - >-
         pnpm exec vitest run --coverage --coverage.include="*.user.js"
         --coverage.reporter=text --coverage.thresholds.lines=80
@@ -42,14 +36,6 @@ tasks:
   audit:js:
     cmds:
       - pnpm audit
-      # semgrep runs in Docker because it ships no Windows binary. That is
-      # what makes the registry rulesets (thousands of curated rules) and
-      # taint analysis usable here at all - a hand-written matcher is no
-      # substitute for tracing untrusted input to a sink. TASKFILE_DIR is
-      # the repo root regardless of any `dir:` above, so .git comes along
-      # and semgrep honours .gitignore; node_modules is skipped by its own
-      # default ignores. Requires Docker Desktop to be running - if it is
-      # not, this fails loudly rather than passing.
       - >
         docker run --rm -v "{{.TASKFILE_DIR}}:/src" semgrep/semgrep
         semgrep scan --config p/javascript --config p/nodejsscan
@@ -82,7 +68,6 @@ tasks:
       - pnpm exec knip
       - uv cache clean rumdl gitfluff semgrep
       - uv self update
-      # winget often exits non-zero even when every package upgraded fine
       - cmd: winget upgrade --all
         ignore_error: true
       - task: lint

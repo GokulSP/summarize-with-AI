@@ -22,10 +22,6 @@ commit-msg:
 
 pre-push:
   commands:
-    # audit:js is deliberately absent - it is a `task ci` gate only. The
-    # Semgrep container re-scans every tracked file on every run (~2 min),
-    # too slow to sit in front of each push. Known trade-off: a push can
-    # go out without a SAST pass, so run `task ci` before a release.
     lockfile-js:
       run: task check:lockfile-js
     typecheck:
