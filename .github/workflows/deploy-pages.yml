@@ -38,14 +38,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Typecheck and test go through Taskfile.yml, so the coverage floors are set in one place
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Not `task lint`: that one rewrites files (--write) and needs uv for rumdl
       - name: Lint
         run: pnpm exec biome check
 
       - name: Typecheck
-        run: pnpm exec tsc -p jsconfig.json --noEmit
+        run: task typecheck:js
 
       - name: Test
-        run: pnpm exec vitest run
+        run: task test:js
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/summarize-with-AI
-// @version     2026.10.02.01
-// @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
+// @version     2026.10.02.02
+// @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (tap-and-hold on mobile, Arrow Up from the keyboard) to select model. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
 // @contributor Claude (Anthropic AI assistant)
@@ -289,19 +289,11 @@ Format exactly as shown:
 
 		/** @param {string} modelId */
 		async saveLastUsedModel(modelId) {
-			if (!modelId) {
-				console.warn("StorageService: Cannot save empty model ID");
-				return;
-			}
 			return await GM.setValue(this.keys.LAST_USED_MODEL, modelId);
 		},
 
 		/** @param {string} service */
 		async loadApiKey(service) {
-			if (!service) {
-				console.error("StorageService: Service parameter is required");
-				return null;
-			}
 			const apiKey = /** @type {string | undefined} */ (
 				await GM.getValue(this.keys.API_KEY(service))
 			);
@@ -310,11 +302,7 @@ Format exactly as shown:
 
 		/** @param {string} service @param {string} apiKey */
 		async saveApiKey(service, apiKey) {
-			if (!service) {
-				throw new Error("StorageService: Service parameter is required");
-			}
-			const keyToSave = (apiKey || "").trim();
-			return await GM.setValue(this.keys.API_KEY(service), keyToSave);
+			return await GM.setValue(this.keys.API_KEY(service), apiKey.trim());
 		},
 
 		/** @param {string} cacheKey */
@@ -351,7 +339,7 @@ Format exactly as shown:
 	}
 
 	/** @typedef {HTMLElement & { _escHandler?: (e: KeyboardEvent) => void }} ModalOverlayElement */
-	/** @typedef {{ message?: string, inputType?: string, placeholder?: string, defaultValue?: string }} ModalOptions */
+	/** @typedef {{ message: string, inputType?: string, placeholder?: string, defaultValue?: string }} ModalOptions */
 
 	// Custom Modal Service - Dieter Rams inspired design
 	const ModalService = {
@@ -360,8 +348,8 @@ Format exactly as shown:
 		/** @type {((value: any) => void) | null} */
 		resolveCallback: null,
 
-		/** @param {string} type @param {ModalOptions} [options] */
-		create(type, options = {}) {
+		/** @param {string} type @param {ModalOptions} options */
+		create(type, options) {
 			return new Promise(resolve => {
 				// A modal replaced before it was answered counts as cancelled, so its
 				// caller isn't left waiting forever.
@@ -388,15 +376,13 @@ Format exactly as shown:
 				className: `sai-modal-content sai-modal-${type}`,
 			});
 
-			// Message
-			if (options.message) {
-				const messageEl = createElement("div", {
+			modalContent.appendChild(
+				createElement("div", {
 					id: CONFIG.ids.modalMessage,
 					className: "sai-modal-message",
-					innerHTML: options.message,
-				});
-				modalContent.appendChild(messageEl);
-			}
+					textContent: options.message,
+				}),
+			);
 
 			// Input field for prompt type
 			let inputEl = null;
@@ -500,20 +486,17 @@ Format exactly as shown:
 
 		/** @param {any} value */
 		resolve(value) {
-			if (this.currentModal?._escHandler) {
-				document.removeEventListener("keydown", this.currentModal._escHandler);
-			}
-
-			if (this.currentModal) {
-				this.currentModal.classList.remove("sai-modal-active");
-				setTimeout(() => {
-					this.close();
-					if (this.resolveCallback) {
-						this.resolveCallback(value);
-						this.resolveCallback = null;
-					}
-				}, CONFIG.timing.modalCloseTransition);
-			}
+			const modal = this.currentModal;
+			// Already closing: a second click or key during the fade-out is ignored.
+			if (!modal?._escHandler) return;
+			document.removeEventListener("keydown", modal._escHandler);
+			modal._escHandler = undefined;
+			modal.classList.remove("sai-modal-active");
+			setTimeout(() => {
+				this.close();
+				this.resolveCallback?.(value);
+				this.resolveCallback = null;
+			}, CONFIG.timing.modalCloseTransition);
 		},
 
 		close() {
@@ -544,7 +527,7 @@ Format exactly as shown:
 	};
 
 	// What this page's summarizing session knows. The overlay, model menu and lightbox
-	// each own their own DOM; they read this only through what they're handed.
+	// each own their own DOM; none of them keeps a copy of this.
 	/** @type {{ activeModel: string, articleData: ArticleData | null, articleImages: ImageItem[], summaryCache: Map<string, { articleData: ArticleData | null, images: ImageItem[], summary: Summary }> }} */
 	const state = {
 		activeModel: CONFIG.modelGroups.claude.models[0].id,
@@ -568,9 +551,9 @@ Format exactly as shown:
 			}, duration);
 		};
 
-		/** @param {Event} [e] */
+		/** @param {Event} e */
 		const cancel = e => {
-			if (e) e.stopPropagation();
+			e.stopPropagation();
 			if (timer) clearTimeout(timer);
 		};
 
@@ -599,10 +582,9 @@ Format exactly as shown:
 	 * @template {keyof HTMLElementTagNameMap} K
 	 * @param {K} tag
 	 * @param {Record<string, any>} [attrs]
-	 * @param {(string | Node)[]} [children]
 	 * @returns {HTMLElementTagNameMap[K]}
 	 */
-	const createElement = (tag, attrs = {}, children = []) => {
+	const createElement = (tag, attrs = {}) => {
 		const el = /** @type {any} */ (document.createElement(tag));
 
 		for (const [key, value] of Object.entries(attrs)) {
@@ -613,10 +595,6 @@ Format exactly as shown:
 			} else {
 				el[key] = value;
 			}
-		}
-
-		for (const child of children) {
-			el.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
 		}
 
 		return el;
@@ -638,7 +616,7 @@ Format exactly as shown:
 			let html = `<div class="sai-summary-content-body">${contentHTML}</div>`;
 
 			if (isError) {
-				html += `<div style="text-align:center;padding-bottom:24px"><button id="${CONFIG.ids.retryButton}" class="sai-retry-button">Try Again</button></div>`;
+				html += `<div style="text-align:center;padding-bottom:var(--space-md)"><button id="${CONFIG.ids.retryButton}" class="sai-retry-button">Try Again</button></div>`;
 			} else if (!isLoading) {
 				if (images.length > 0) {
 					const galleryItems = [];
@@ -646,28 +624,28 @@ Format exactly as shown:
 					for (let i = 0; i < displayLimit; i++) {
 						const item = images[i];
 						if (item.type === "iframe") {
-							galleryItems.push(`<div class="sai-gallery-item sai-gallery-item-iframe" data-image-index="${i}">
-                <div class="sai-iframe-preview">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							galleryItems.push(`<button type="button" class="sai-gallery-item sai-gallery-item-iframe" data-image-index="${i}">
+                <span class="sai-iframe-preview">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <rect x="2" y="3" width="20" height="14" rx="2"/>
                     <line x1="8" y1="21" x2="16" y2="21"/>
                     <line x1="12" y1="17" x2="12" y2="21"/>
                     <path d="M7 8l5 3-5 3V8z"/>
                   </svg>
                   <span>Interactive Chart</span>
-                </div>
-              </div>`);
+                </span>
+              </button>`);
 						} else {
-							galleryItems.push(`<div class="sai-gallery-item" data-image-index="${i}">
+							galleryItems.push(`<button type="button" class="sai-gallery-item" data-image-index="${i}">
                 <img src="${escapeHtml(item.src)}" alt="${escapeHtml(item.alt || "Article image")}" loading="lazy" decoding="async" />
-              </div>`);
+              </button>`);
 						}
 					}
 					html += `<div class="sai-image-gallery">${galleryItems.join("")}</div>`;
 				}
 
 				html += `<div id="${CONFIG.ids.questionSection}" class="sai-question-section">
-          <div class="sai-question-header">Ask a question about this article:</div>
+          <label class="sai-question-header" for="${CONFIG.ids.questionInput}">Ask a question about this article:</label>
           <div class="sai-question-input-wrapper">
             <input
               type="text"
@@ -722,11 +700,11 @@ Format exactly as shown:
 						questionInput.value = "";
 					},
 				};
-				onAsk(questionInput.value.trim(), answerBox);
+				handleAskQuestion(questionInput.value.trim(), answerBox);
 			};
 			const handlers = {
 				close: () => close(),
-				retry: () => onRetry(),
+				retry: () => processSummarization(),
 				ask,
 				/** @param {Event} e */
 				keypress: e => {
@@ -803,16 +781,7 @@ Format exactly as shown:
 		return { show, update, close, isOpen: () => overlay !== null };
 	})();
 
-	// What the overlay's buttons do. Function declarations, so they're hoisted.
-	function onRetry() {
-		processSummarization();
-	}
-
-	/** @param {string} question @param {AnswerBox} answerBox */
-	function onAsk(question, answerBox) {
-		handleAskQuestion(question, answerBox);
-	}
-
+	// What closing the overlay does to the session.
 	function onClosed() {
 		// Keep articleData and the cache for re-summarizing; drop the shown images.
 		state.articleImages = [];
@@ -929,11 +898,11 @@ Format exactly as shown:
 			const rules =
 				Object.entries(SITE_IMAGE_RULES).find(([host]) => hostname.includes(host))?.[1] ?? {};
 
-			// Scroll each lazy image into view (non-blocking) so it starts loading, then give
-			// the batch a moment; a 500ms failsafe caps the wait.
+			// Scroll each lazy image into view on the next frame so it starts loading, then
+			// give the batch 100ms. Hidden tabs pause animation frames, so 500ms caps the wait.
 			/** @returns {Promise<void>} */
-			const triggerLazyLoading = () => {
-				return new Promise(resolve => {
+			const triggerLazyLoading = () =>
+				new Promise(resolve => {
 					const images = document.querySelectorAll(
 						'img[loading="lazy"], img[data-src], img[data-lazy-src]',
 					);
@@ -941,34 +910,12 @@ Format exactly as shown:
 						resolve();
 						return;
 					}
-
-					let loadedCount = 0;
-					const timeout = setTimeout(() => resolve(), 500); // Failsafe timeout
-
-					const observer = new IntersectionObserver(entries => {
-						entries.forEach(entry => {
-							if (entry.isIntersecting) {
-								observer.unobserve(entry.target);
-							}
-						});
-					});
-
-					images.forEach(img => {
-						observer.observe(img);
-						// Trigger load by scrolling into view (non-blocking)
-						requestAnimationFrame(() => {
-							img.scrollIntoView({ block: "nearest", behavior: "auto" });
-							loadedCount++;
-							if (loadedCount === images.length) {
-								clearTimeout(timeout);
-								observer.disconnect();
-								// Small delay to let images actually load
-								setTimeout(resolve, 100);
-							}
-						});
+					setTimeout(resolve, 500);
+					requestAnimationFrame(() => {
+						for (const img of images) img.scrollIntoView({ block: "nearest", behavior: "auto" });
+						setTimeout(resolve, 100);
 					});
 				});
-			};
 
 			await triggerLazyLoading();
 
@@ -1009,44 +956,42 @@ Format exactly as shown:
 				}
 			}
 
-			// STEP 2: Extract regular images (only if space available after iframes)
-			if (images.length < maxImages) {
-				const combinedSelector =
-					'article img, main img, [role="main"] img, .article-content img, .post-content img, .entry-content img';
-				const imgs = /** @type {NodeListOf<HTMLImageElement>} */ (
-					document.querySelectorAll(combinedSelector)
-				);
+			// STEP 2: Extract regular images into whatever room the iframes left
+			const combinedSelector =
+				'article img, main img, [role="main"] img, .article-content img, .post-content img, .entry-content img';
+			const imgs = /** @type {NodeListOf<HTMLImageElement>} */ (
+				document.querySelectorAll(combinedSelector)
+			);
 
-				for (const img of imgs) {
-					if (images.length >= maxImages) break;
+			for (const img of imgs) {
+				if (images.length >= maxImages) break;
 
-					const src = img.currentSrc || img.src || img.dataset.src || img.dataset.lazySrc;
-					if (!src || seen.has(src) || src.startsWith("data:")) continue;
+				const src = img.currentSrc || img.src || img.dataset.src || img.dataset.lazySrc;
+				if (!src || seen.has(src) || src.startsWith("data:")) continue;
 
-					if (rules.exclude?.(img, src)) continue;
+				if (rules.exclude?.(img, src)) continue;
 
-					const fromUrl = rules.sizeFromUrl?.(src) ?? null;
-					const width = fromUrl ? fromUrl.width : img.naturalWidth;
-					const height = fromUrl ? fromUrl.height : img.naturalHeight;
-					const isChart = fromUrl?.isChart ?? false;
+				const fromUrl = rules.sizeFromUrl?.(src) ?? null;
+				const width = fromUrl ? fromUrl.width : img.naturalWidth;
+				const height = fromUrl ? fromUrl.height : img.naturalHeight;
+				const isChart = fromUrl?.isChart ?? false;
 
-					if ((width < 300 || height < 300) && !rules.keepWhenSmall?.(src, isChart)) continue;
-					if (rules.excludeSize?.({ width, height })) continue;
-					if (rules.firstLargeImageOnly && width >= 1280 && height >= 720) {
-						if (hasLargeImage) continue;
-						hasLargeImage = true;
-					}
-
-					seen.add(src);
-					images.push({
-						src,
-						alt: img.alt || "",
-						width,
-						height,
-						type: "image",
-						priority: 0,
-					});
+				if ((width < 300 || height < 300) && !rules.keepWhenSmall?.(src, isChart)) continue;
+				if (rules.excludeSize?.({ width, height })) continue;
+				if (rules.firstLargeImageOnly && width >= 1280 && height >= 720) {
+					if (hasLargeImage) continue;
+					hasLargeImage = true;
 				}
+
+				seen.add(src);
+				images.push({
+					src,
+					alt: img.alt || "",
+					width,
+					height,
+					type: "image",
+					priority: 0,
+				});
 			}
 
 			return images;
@@ -1074,15 +1019,14 @@ Format exactly as shown:
 				createElement("span", { className: "sai-group-header-text", textContent: text }),
 			);
 			container.appendChild(
-				createElement("a", {
-					href: "#",
+				createElement("button", {
+					type: "button",
 					textContent: "Reset Key",
 					className: "sai-reset-key-link",
 					title: `Reset ${text} API Key`,
 					onclick: (/** @type {MouseEvent} */ e) => {
-						e.preventDefault();
 						e.stopPropagation();
-						onResetKey(service);
+						handleApiKeyReset(service);
 					},
 				}),
 			);
@@ -1091,14 +1035,15 @@ Format exactly as shown:
 
 		/** @param {ModelEntry} modelObj @param {Service} service */
 		function createModelItem(modelObj, service) {
-			const item = createElement("div", {
+			const item = createElement("button", {
+				type: "button",
 				className: "sai-model-item",
-				textContent: modelObj.name || modelObj.id,
+				textContent: modelObj.name,
 				title: "Click to use this model.",
 			});
 			item.dataset.modelId = modelObj.id;
 			item.dataset.service = service;
-			if (modelObj.id === activeModelId()) {
+			if (modelObj.id === state.activeModel) {
 				item.classList.add("sai-model-item-active");
 			}
 			return item;
@@ -1109,15 +1054,12 @@ Format exactly as shown:
 			const fragment = document.createDocumentFragment();
 			for (const [serviceKey, group] of Object.entries(CONFIG.modelGroups)) {
 				const service = /** @type {Service} */ (serviceKey);
-				const models = group.models || [];
-				if (models.length > 0) {
-					const groupDiv = createElement("div", { className: "sai-model-group" });
-					groupDiv.appendChild(createHeader(group.name, service));
-					for (const modelObj of models) {
-						groupDiv.appendChild(createModelItem(modelObj, service));
-					}
-					fragment.appendChild(groupDiv);
+				const groupDiv = createElement("div", { className: "sai-model-group" });
+				groupDiv.appendChild(createHeader(group.name, service));
+				for (const modelObj of group.models) {
+					groupDiv.appendChild(createModelItem(modelObj, service));
 				}
+				fragment.appendChild(groupDiv);
 			}
 			menu.innerHTML = "";
 			menu.appendChild(fragment);
@@ -1138,6 +1080,17 @@ Format exactly as shown:
 			}
 			if (stale) populate(dropdown);
 			dropdown.style.display = "block";
+		}
+
+		/** Opens the menu from the keyboard, with focus on the active model. */
+		function openDropdownWithFocus() {
+			if (!dropdown) return;
+			if (!isDropdownOpen()) toggleDropdown();
+			const item = /** @type {HTMLElement | null} */ (
+				dropdown.querySelector(".sai-model-item-active") ??
+					dropdown.querySelector(".sai-model-item")
+			);
+			item?.focus();
 		}
 
 		/** @param {boolean} visible */
@@ -1172,7 +1125,7 @@ Format exactly as shown:
 					const isLeavingInput = target?.closest(CONFIG.selectors.input) && !isModalInput;
 					const isEnteringInput = relatedTarget?.closest(CONFIG.selectors.input);
 
-					if (isLeavingInput && !isEnteringInput && hasArticle()) {
+					if (isLeavingInput && !isEnteringInput && state.articleData !== null) {
 						focusOutTimer = setTimeout(() => {
 							if (!document.activeElement?.closest(CONFIG.selectors.input)) {
 								setButtonVisible(true);
@@ -1185,15 +1138,17 @@ Format exactly as shown:
 			);
 		}
 
-		/** Adds the button and menu to the page and wires them up (once). */
+		/** Adds the button and menu to the page and wires them up; called once per page. */
 		function mount() {
-			if (button) return;
-			const summarizeButton = createElement("div", {
+			const summarizeButton = createElement("button", {
+				type: "button",
 				id: CONFIG.ids.button,
 				className: "sai-scope",
 				textContent: "S",
-				title: "Summarize (Alt+S) / Long Press or Tap & Hold to Select Model",
+				title: "Summarize (Alt+S) / Long Press, Tap & Hold or Arrow Up to Select Model",
 			});
+			summarizeButton.setAttribute("aria-label", "Summarize with AI");
+			summarizeButton.setAttribute("aria-haspopup", "menu");
 			const menu = createElement("div", {
 				id: CONFIG.ids.dropdown,
 				className: "sai-scope",
@@ -1207,17 +1162,31 @@ Format exactly as shown:
 
 			const longPress = createLongPressHandler(toggleDropdown);
 			summarizeButton.addEventListener("click", () => {
-				if (!longPress.check()) onSummarize();
+				if (!longPress.check()) processSummarization();
 			});
 			longPress.attachTo(summarizeButton);
+			// The keyboard stand-in for a long press.
+			summarizeButton.addEventListener("keydown", (/** @type {KeyboardEvent} */ e) => {
+				if (e.key === "ArrowUp" || e.key === "ContextMenu") {
+					e.preventDefault();
+					openDropdownWithFocus();
+				}
+			});
 
 			menu.addEventListener("click", (/** @type {MouseEvent} */ e) => {
-				const modelItem = /** @type {HTMLElement} */ (e.target)?.closest(
-					".sai-model-item:not(#add-custom-model)",
-				);
+				const modelItem = /** @type {HTMLElement} */ (e.target)?.closest(".sai-model-item");
 				if (modelItem instanceof HTMLElement && modelItem.dataset.modelId) {
 					hideDropdown();
 					onSelectModel(modelItem.dataset.modelId);
+				}
+			});
+			// Escape inside the menu closes only the menu and hands focus back to the button.
+			menu.addEventListener("keydown", (/** @type {KeyboardEvent} */ e) => {
+				if (e.key === "Escape") {
+					e.preventDefault();
+					e.stopPropagation();
+					hideDropdown();
+					summarizeButton.focus();
 				}
 			});
 
@@ -1232,7 +1201,6 @@ Format exactly as shown:
 
 		return {
 			mount,
-			isMounted: () => button !== null,
 			showButton: () => setButtonVisible(true),
 			hideButton: () => setButtonVisible(false),
 			isDropdownOpen,
@@ -1243,29 +1211,11 @@ Format exactly as shown:
 		};
 	})();
 
-	// What the model menu reads and does. Function declarations, so they're hoisted.
-	function activeModelId() {
-		return state.activeModel;
-	}
-
-	function hasArticle() {
-		return state.articleData !== null;
-	}
-
-	function onSummarize() {
-		processSummarization();
-	}
-
-	/** @param {string} modelId */
+	/** Switches to modelId, remembers it for next time, and summarizes with it. @param {string} modelId */
 	function onSelectModel(modelId) {
 		state.activeModel = modelId;
 		StorageService.saveLastUsedModel(modelId);
 		processSummarization();
-	}
-
-	/** @param {Service} service */
-	function onResetKey(service) {
-		handleApiKeyReset(service);
 	}
 
 	/** @param {string} message */
@@ -1380,7 +1330,6 @@ Format exactly as shown:
 			return null;
 		}
 
-		const modelDisplayName = modelConfig.name || modelConfig.id;
 		const service = modelConfig.service;
 
 		const apiKey = await StorageService.loadApiKey(service);
@@ -1394,9 +1343,12 @@ Format exactly as shown:
 		await syncLatestModel(service, apiKey);
 
 		const finalModelConfig = getActiveModelConfig() ?? modelConfig;
-		const finalDisplayName = finalModelConfig.name || finalModelConfig.id;
-
-		return { modelConfig: finalModelConfig, apiKey, service, modelDisplayName: finalDisplayName };
+		return {
+			modelConfig: finalModelConfig,
+			apiKey,
+			service,
+			modelDisplayName: finalModelConfig.name,
+		};
 	}
 
 	async function processSummarization() {
@@ -1449,8 +1401,7 @@ Format exactly as shown:
 		}
 	}
 
-	// Known-stable text model to fall back to if the auto-discovered "latest flash"
-	// model turns out to be a managed-agent/live variant requiring the Interactions API.
+	// Prefixes the error with the model it came from, so the user sees which model failed.
 	/** @param {Error} error @param {string} modelId */
 	function annotateModelError(error, modelId) {
 		error.message = `[${modelId}] ${error.message}`;
@@ -1852,13 +1803,8 @@ Format exactly as shown:
 		Overlay.update(cleanedSummary, { images: state.articleImages });
 	}
 
-	/** @param {string} service */
+	/** @param {Service} service */
 	async function handleApiKeyReset(service) {
-		if (!service || !CONFIG.modelGroups[/** @type {Service} */ (service)]) {
-			console.error("Invalid service provided for API key reset:", service);
-			await ModalService.alert("Invalid service provided.");
-			return;
-		}
 		const newApiKey = await ModalService.prompt(
 			`Enter your ${toTitleCase(service)} API key:`,
 			"",
@@ -1899,7 +1845,7 @@ Format exactly as shown:
 
 		// Split into lines for processing
 		const lines = formatted.split("\n");
-		const result = [];
+		const htmlLines = [];
 		let inList = false;
 		let lastWasSectionHeader = false;
 
@@ -1913,7 +1859,7 @@ Format exactly as shown:
 				}
 				// Close list if we were in one
 				if (inList) {
-					result.push("</ul>");
+					htmlLines.push("</ul>");
 					inList = false;
 				}
 				continue;
@@ -1922,12 +1868,12 @@ Format exactly as shown:
 			// Check if this is a numbered list item
 			if (formatQA.numberedList.test(trimmedLine)) {
 				if (!inList) {
-					result.push("<ul>");
+					htmlLines.push("<ul>");
 					inList = true;
 				}
 				// Remove the number and add as list item
 				const content = trimmedLine.replace(formatQA.numberedListRemove, "");
-				result.push(`<li>${content}</li>`);
+				htmlLines.push(`<li>${content}</li>`);
 				lastWasSectionHeader = false;
 			}
 			// Check if line is a section header (contains colon before closing tags)
@@ -1937,43 +1883,43 @@ Format exactly as shown:
 				trimmedLine.match(/^(<p>)?<strong>[^<]+:<\/strong>(<\/p>)?$/)
 			) {
 				if (inList) {
-					result.push("</ul>");
+					htmlLines.push("</ul>");
 					inList = false;
 				}
 				// Wrap standalone <strong> headers in paragraph tags
 				if (!trimmedLine.startsWith("<p>")) {
-					result.push(`<p>${trimmedLine}</p>`);
+					htmlLines.push(`<p>${trimmedLine}</p>`);
 				} else {
-					result.push(trimmedLine);
+					htmlLines.push(trimmedLine);
 				}
 				lastWasSectionHeader = true;
 			}
 			// Check if line already has HTML tags (but not section headers)
 			else if (trimmedLine.startsWith("<p>") || trimmedLine.startsWith("<strong>")) {
 				if (inList) {
-					result.push("</ul>");
+					htmlLines.push("</ul>");
 					inList = false;
 				}
-				result.push(trimmedLine);
+				htmlLines.push(trimmedLine);
 				lastWasSectionHeader = false;
 			}
 			// Regular paragraph
 			else {
 				if (inList) {
-					result.push("</ul>");
+					htmlLines.push("</ul>");
 					inList = false;
 				}
-				result.push(`<p>${trimmedLine}</p>`);
+				htmlLines.push(`<p>${trimmedLine}</p>`);
 				lastWasSectionHeader = false;
 			}
 		}
 
 		// Close any open list
 		if (inList) {
-			result.push("</ul>");
+			htmlLines.push("</ul>");
 		}
 
-		return result.join("\n");
+		return htmlLines.join("\n");
 	}
 
 	/** @param {string} question @param {AnswerBox} answerBox */
@@ -2429,7 +2375,8 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			thumbnailStrip.innerHTML = "";
 
 			images.forEach((item, index) => {
-				const thumbItem = createElement("div", {
+				const thumbItem = createElement("button", {
+					type: "button",
 					className: "sai-lightbox-thumbnail-item",
 				});
 
@@ -2438,7 +2385,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 				// Create thumbnail image or iframe indicator
 				let thumbContent;
 				if (isIframe) {
-					thumbContent = createElement("div", {
+					thumbContent = createElement("span", {
 						className: "sai-lightbox-thumbnail-iframe-indicator",
 						textContent: "🖼️",
 						title: "Interactive content",
@@ -2451,8 +2398,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 					});
 				}
 
-				// Make thumbnail clickable to navigate
-				thumbContent.addEventListener("click", () => {
+				thumbItem.addEventListener("click", () => {
 					currentImageIndex = index;
 					updateLightboxImage();
 				});
@@ -2490,7 +2436,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 	function handleKeyPress(e) {
 		if (e.altKey && e.code === "KeyS" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
 			e.preventDefault();
-			if (ModelMenu.isMounted() && !document.activeElement?.closest(CONFIG.selectors.input)) {
+			if (!document.activeElement?.closest(CONFIG.selectors.input)) {
 				processSummarization();
 			}
 		}
@@ -2510,15 +2456,6 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 	function injectStyles() {
 		const fontFamily = CONFIG.styles.fontFamily;
 
-		// Add viewport meta tag to prevent zooming on mobile
-		if (!document.querySelector('meta[name="viewport"][content*="user-scalable=no"]')) {
-			const viewport = document.createElement("meta");
-			viewport.name = "viewport";
-			viewport.content =
-				"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no";
-			document.head.appendChild(viewport);
-		}
-
 		GM.addStyle(`
       /* =================================================================
          DESIGN SYSTEM TOKENS - Dieter Rams Principles
@@ -2531,7 +2468,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
            reset non-inherited layout properties (display, position, margin) that
            this file's own more-specific rules for each container rely on. */
         font-family: ${fontFamily};
-        font-size: 16px;
+        font-size: var(--font-size-base);
         font-weight: 400;
         font-style: normal;
         line-height: 1.6;
@@ -2549,7 +2486,17 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         --color-bg-primary: #ffffff;
         --color-bg-hover: #f5f5f5;
         --color-error: #d32f2f;
-        --color-accent: #1A73E8;
+        --color-accent: #1565c0;
+        /* Loading-text glow cycle; each stop keeps 4.5:1 on --color-bg-primary */
+        --glow-1: #1565c0;
+        --glow-2: #7b1fa2;
+        --glow-3: #c62828;
+        /* Floating S button: same in both modes (white on blue, 4.5:1+) */
+        --fab-bg: #1a73e8;
+        --fab-bg-hover: #1976d2;
+        --fab-text: #ffffff;
+        /* Exhibit charts are drawn for a white canvas in either mode */
+        --chart-canvas-bg: #ffffff;
 
         /* Component-specific colors */
         --button-bg: #1a1a1a;
@@ -2575,6 +2522,8 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         /* Typography Scale */
         --font-size-sm: 14px;
         --font-size-base: 16px;
+        --font-size-icon: 24px;
+        --font-size-icon-lg: 32px;
         --font-weight-normal: 400;
         --font-weight-semibold: 600;
         --line-height-normal: 1.6;
@@ -2612,6 +2561,9 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
           --color-text-tertiary: #949494;
           --color-error: #f28b82;
           --color-accent: #8ab4f8;
+          --glow-1: #8ab4f8;
+          --glow-2: #ce93d8;
+          --glow-3: #f28b82;
           --color-border: #333;
           --color-border-light: #2a2a2a;
           --color-bg-primary: #1a1a1a;
@@ -2635,16 +2587,11 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
       }
 
       /* =================================================================
-         MOBILE TOUCH PREVENTION
+         MOBILE TOUCH HANDLING
          ================================================================= */
       @media (max-width: 600px) {
-        /* Prevent zooming and manipulation on all content areas */
-        body {
-          touch-action: pan-y;
-          overscroll-behavior: none;
-        }
-
-        /* Lock all overlay and modal content from manipulation */
+        /* "manipulation" still allows panning and pinch-zoom; it only drops
+           double-tap zoom, which would otherwise swallow quick taps. */
         #${CONFIG.ids.overlay},
         #${CONFIG.ids.content},
         .sai-modal-overlay,
@@ -2654,7 +2601,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         .sai-image-gallery,
         .sai-lightbox-overlay,
         .sai-lightbox-content {
-          touch-action: pan-y;
+          touch-action: manipulation;
           user-select: none;
           -webkit-user-select: none;
         }
@@ -2670,22 +2617,14 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         }
 
         /* Ensure buttons and interactive elements remain functional */
-        button,
-        .sai-modal-button,
-        .sai-menubar-button,
-        .sai-ask-button,
-        #${CONFIG.ids.button},
-        .sai-model-item,
-        .lightbox-nav,
-        .lightbox-close {
+        .sai-scope button,
+        #${CONFIG.ids.button} {
           touch-action: manipulation;
           user-select: none;
           -webkit-user-select: none;
         }
 
         /* Allow input fields to be interactive */
-        input,
-        textarea,
         .sai-question-input,
         .sai-modal-input {
           touch-action: manipulation;
@@ -2760,6 +2699,8 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         border-color: var(--input-focus-border);
         background: var(--color-bg-primary);
         box-shadow: none;
+        outline: 2px solid var(--color-accent);
+        outline-offset: -1px;
       }
 
       .sai-modal-input::placeholder {
@@ -2796,7 +2737,17 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         background: transparent;
       }
 
-      .sai-modal-button:focus {
+      /* Every button the script adds shows where keyboard focus is. */
+      .sai-scope button:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+      }
+      #${CONFIG.ids.button}:focus-visible {
+        outline: 2px solid var(--fab-bg);
+        outline-offset: 3px;
+      }
+      /* Inset: the modal clips anything drawn outside its buttons. */
+      .sai-scope .sai-modal-button:focus {
         outline: 2px solid var(--color-accent);
         outline-offset: -2px;
       }
@@ -2815,9 +2766,10 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
       #${CONFIG.ids.button} {
         position: fixed; bottom: 24px; right: 24px;
         width: 56px; height: 56px;
-        background: #1A73E8;
-        color: #ffffff;
-        font-size: 16px; font-weight: var(--font-weight-normal);
+        background: var(--fab-bg);
+        color: var(--fab-text);
+        padding: 0;
+        font-size: var(--font-size-base); font-weight: var(--font-weight-normal);
         font-family: ${fontFamily};
         border-radius: 50%; cursor: pointer; z-index: var(--z-button);
         box-shadow: var(--shadow-button);
@@ -2830,7 +2782,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         border: none;
       }
       #${CONFIG.ids.button}:hover {
-        background: #1976D2;
+        background: var(--fab-bg-hover);
         box-shadow: var(--shadow-button-hover);
         transform: translateY(-1px);
       }
@@ -2902,7 +2854,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         background: transparent;
         border: 1px solid var(--color-border);
         font-family: ${fontFamily};
-        font-size: 15px;
+        font-size: var(--font-size-base);
         font-weight: var(--font-weight-normal);
         color: var(--color-text-secondary);
         cursor: pointer;
@@ -2946,20 +2898,20 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         margin-bottom: 1.2em;
         color: inherit;
         max-width: 65ch;
-        font-size: 16px !important;
+        font-size: var(--font-size-base) !important;
         line-height: 1.5 !important;
       }
       #${CONFIG.ids.content} ul {
         margin: 0 0 1.2em 0;
         padding-left: 1.5em;
         color: inherit;
-        font-size: 16px !important;
+        font-size: var(--font-size-base) !important;
       }
       #${CONFIG.ids.content} li {
         list-style-type: disc;
         margin-bottom: 0.6em;
         color: inherit;
-        font-size: 16px !important;
+        font-size: var(--font-size-base) !important;
         line-height: 1.5 !important;
       }
       #${CONFIG.ids.content} strong {
@@ -3000,7 +2952,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
       .sai-error-message {
         flex: 1;
-        font-size: 15px;
+        font-size: var(--font-size-base);
         line-height: 1.5;
         color: var(--color-text-primary);
         margin: 0;
@@ -3010,7 +2962,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         background: transparent;
         border: none;
         color: var(--color-text-secondary);
-        font-size: 24px;
+        font-size: var(--font-size-icon);
         line-height: 1;
         cursor: pointer;
         padding: 0;
@@ -3030,8 +2982,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         color: var(--color-text-primary);
       }
 
-      /* Base button styles */
-      .sai-retry-button, .sai-save-button {
+      .sai-retry-button {
         display: block;
         margin: var(--space-md) auto 0;
         padding: 12px var(--space-md);
@@ -3046,14 +2997,10 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         transition: all var(--transition-fast);
         letter-spacing: 0.02em;
       }
-      .sai-retry-button:hover, .sai-save-button:hover:not(:disabled) {
+      .sai-retry-button:hover {
         background-color: var(--button-bg-hover);
         box-shadow: var(--shadow-sm);
         transform: translateY(-1px);
-      }
-      .sai-save-button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
       }
 
       /* =================================================================
@@ -3066,10 +3013,11 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         background: var(--section-bg);
       }
       .sai-question-header {
+        display: block;
         font-weight: var(--font-weight-normal);
         color: var(--color-text-primary);
         margin-bottom: 12px;
-        font-size: 15px;
+        font-size: var(--font-size-base);
       }
       .sai-question-input-wrapper {
         display: flex;
@@ -3082,14 +3030,15 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         border: 1px solid var(--color-border);
         border-radius: var(--radius-sm);
         font-family: ${fontFamily};
-        font-size: 15px;
+        font-size: var(--font-size-base);
         transition: border-color var(--transition-fast);
         background: var(--color-bg-primary);
         color: var(--color-text-primary);
         outline: none;
       }
       .sai-question-input:focus {
-        outline: none;
+        outline: 2px solid var(--color-accent);
+        outline-offset: -1px;
         border-color: var(--input-focus-border);
         box-shadow: none;
       }
@@ -3106,7 +3055,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         border-radius: var(--radius-sm);
         cursor: pointer;
         font-family: ${fontFamily};
-        font-size: 15px;
+        font-size: var(--font-size-base);
         font-weight: var(--font-weight-normal);
         transition: all var(--transition-fast);
         white-space: nowrap;
@@ -3173,6 +3122,12 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         gap: 12px;
       }
       .sai-gallery-item {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: none;
+        color: inherit;
+        font: inherit;
         overflow: hidden;
         border-radius: var(--radius-sm);
         background: var(--color-bg-primary);
@@ -3193,7 +3148,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
       /* Exhibit-chart SVGs are designed for a white canvas — force it regardless of
          dark/light mode so chart text stays legible, and avoid cropping chart labels. */
       .sai-gallery-item img[src*=".svg"] {
-        background: #fff;
+        background: var(--chart-canvas-bg);
         object-fit: contain;
       }
       .sai-gallery-item-iframe {
@@ -3294,7 +3249,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         cursor: zoom-in;
       }
       .sai-lightbox-image[src*=".svg"] {
-        background: #fff;
+        background: var(--chart-canvas-bg);
       }
       .sai-lightbox-iframe {
         width: 90vw;
@@ -3334,6 +3289,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         flex-shrink: 0;
         width: 80px;
         height: 80px;
+        padding: 0;
         border: 2px solid transparent;
         border-radius: var(--radius-sm);
         overflow: hidden;
@@ -3356,7 +3312,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         display: block;
       }
       .sai-lightbox-thumbnail-img[src*=".svg"] {
-        background: #fff;
+        background: var(--chart-canvas-bg);
         object-fit: contain;
       }
       .sai-lightbox-thumbnail-iframe-indicator {
@@ -3365,7 +3321,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 32px;
+        font-size: var(--font-size-icon-lg);
         background: var(--section-bg);
         border: 1px solid var(--color-border);
       }
@@ -3394,6 +3350,10 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         flex-grow: 1;
       }
       .sai-reset-key-link {
+        background: none;
+        border: none;
+        padding: 0;
+        font-family: ${fontFamily};
         font-size: var(--font-size-base);
         color: var(--reset-link-color);
         text-decoration: none;
@@ -3407,6 +3367,11 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         color: var(--reset-link-hover);
       }
       .sai-model-item {
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        border: none;
+        font-family: ${fontFamily};
         padding: 11px 14px;
         margin: 2px 0;
         border-radius: var(--radius-sm);
@@ -3441,6 +3406,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         margin: 0;
         padding: 0;
         animation: sai-glow 2.5s ease-in-out infinite;
+        text-shadow: 0 0 12px color-mix(in srgb, currentColor 40%, transparent);
         font-family: ${fontFamily};
         font-weight: 400;
         line-height: 1;
@@ -3451,12 +3417,11 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
          ANIMATIONS
          ================================================================= */
       @keyframes sai-glow {
-        0%, 100% { color: #4a90e2; text-shadow: 0 0 10px rgba(74, 144, 226, 0.6), 0 0 20px rgba(74, 144, 226, 0.4); }
-        33%      { color: #9b59b6; text-shadow: 0 0 12px rgba(155, 89, 182, 0.7), 0 0 25px rgba(155, 89, 182, 0.5); }
-        66%      { color: #e74c3c; text-shadow: 0 0 12px rgba(231, 76, 60, 0.7), 0 0 25px rgba(231, 76, 60, 0.5); }
+        0%, 100% { color: var(--glow-1); }
+        33%      { color: var(--glow-2); }
+        66%      { color: var(--glow-3); }
       }
       @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-      @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
       @keyframes slideInUp {
          from { transform: translateY(30px); opacity: 0; }
          to { transform: translateY(0); opacity: 1; }
@@ -3475,19 +3440,19 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
          .sai-modal-message {
            padding: 24px 24px 20px 24px;
-           font-size: 15px;
+           font-size: var(--font-size-sm);
          }
 
          .sai-modal-input {
            margin: 0 24px 20px 24px;
            width: calc(100% - 48px);
            padding: 12px 14px;
-           font-size: 15px;
+           font-size: var(--font-size-sm);
          }
 
          .sai-modal-button {
            padding: 14px;
-           font-size: 15px;
+           font-size: var(--font-size-sm);
          }
 
          /* Error Notification Mobile */
@@ -3506,13 +3471,22 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
          }
 
          .sai-error-message {
-           font-size: 14px;
+           font-size: var(--font-size-sm);
          }
 
          .sai-error-close {
-           width: 20px;
-           height: 20px;
-           font-size: 21px;
+           width: 44px;
+           height: 44px;
+         }
+
+         /* 44px touch targets */
+         .sai-menubar-button,
+         .sai-ask-button,
+         .sai-modal-button,
+         .sai-model-item,
+         .sai-reset-key-link {
+           min-height: 44px;
+           min-width: 44px;
          }
 
          #${CONFIG.ids.content} {
@@ -3532,7 +3506,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
             z-index: 11;
          }
          .sai-menubar-button {
-            font-size: 14px;
+            font-size: var(--font-size-sm);
             padding: 6px 10px;
          }
          .sai-summary-content-body {
@@ -3542,18 +3516,18 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
             padding: 20px 16px;
          }
          .sai-question-header {
-            font-size: 14px;
+            font-size: var(--font-size-sm);
          }
          .sai-question-input-wrapper {
             flex-direction: column;
             gap: 8px;
          }
          .sai-question-input {
-            font-size: 14px;
+            font-size: var(--font-size-sm);
          }
          .sai-ask-button {
             width: 100%;
-            font-size: 14px;
+            font-size: var(--font-size-sm);
          }
          .sai-image-gallery {
             padding: 20px 16px;
@@ -3571,11 +3545,11 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
             gap: 8px;
          }
          .sai-lightbox-menubar .sai-menubar-button {
-            font-size: 14px;
+            font-size: var(--font-size-sm);
             padding: 4px 6px;
          }
          .sai-lightbox-counter {
-            font-size: 14px;
+            font-size: var(--font-size-sm);
             padding: 4px 8px;
          }
          .sai-lightbox-content {

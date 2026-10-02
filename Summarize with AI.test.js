@@ -201,6 +201,6 @@ describe("extractSummaryFromResponse", () => {
 				service: "claude",
 				data: { content: [] },
 			}),
-		).toThrow(/did not contain a valid summary/);
+		).toThrow("API response did not contain a valid summary (status: 200).");
 	});
 });

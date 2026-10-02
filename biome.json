@@ -17,20 +17,8 @@
 		"enabled": true,
 		"rules": {
 			"preset": "recommended",
-			"suspicious": {
-				"noExplicitAny": "off",
-				"noArrayIndexKey": "off"
-			},
-			"style": {
-				"noNonNullAssertion": "off",
-				"useConst": "error"
-			},
-			"complexity": {
-				"noExcessiveCognitiveComplexity": "off",
-				"noForEach": "off"
-			},
 			"correctness": {
-				"noUnusedVariables": "off"
+				"noUnusedVariables": "error"
 			}
 		}
 	},

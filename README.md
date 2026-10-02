@@ -5,7 +5,7 @@ A userscript that summarizes articles with Claude or Gemini in one click, with a
 ## Features
 
 - One-click summarization (Alt+S) using Claude or Gemini — latest Sonnet/Flash model auto-discovered at runtime
-- Long-press the button to switch models; each model keeps its own summary cache
+- Long-press the button (or press Arrow Up while it has focus) to switch models; each model keeps its own summary cache
 - Image gallery with full-screen lightbox (keyboard + swipe navigation)
 - Follow-up Q&A about the article, answered by the same model
 - One-click copy of the formatted summary

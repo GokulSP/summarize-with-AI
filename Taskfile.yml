@@ -60,7 +60,8 @@ tasks:
 
   sync:metadata:
     cmds:
-      - node scripts/sync-metadata.js
+      # pnpm exec runs the Node that devEngines pins, not whatever is on PATH
+      - pnpm exec node scripts/sync-metadata.js
 
   update:
     desc: Monthly. Upgrade locked deps, uvx cache and system binaries, then re-run checks
