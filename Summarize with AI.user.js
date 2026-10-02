@@ -345,15 +345,16 @@ Format exactly as shown:
 	 */
 	function showMessage(message) {
 		if (Overlay.isOpen()) {
-			Overlay.update(`<p style="color: ${CONFIG.styles.colors.error};">${message}</p>`, {
-				images: state.articleImages,
-			});
+			Overlay.update(
+				`<p style="color: ${CONFIG.styles.colors.error};">${escapeHtml(message)}</p>`,
+				{
+					images: state.articleImages,
+				},
+			);
 		} else {
 			showErrorNotification(message);
 		}
 	}
-
-	// Validation Functions
 
 	/** @typedef {HTMLElement & { _escHandler?: (e: KeyboardEvent) => void }} ModalOverlayElement */
 	/** @typedef {{ message?: string, inputType?: string, placeholder?: string, defaultValue?: string }} ModalOptions */
@@ -368,6 +369,9 @@ Format exactly as shown:
 		/** @param {string} type @param {ModalOptions} [options] */
 		create(type, options = {}) {
 			return new Promise(resolve => {
+				// A modal replaced before it was answered counts as cancelled, so its
+				// caller isn't left waiting forever.
+				this.resolveCallback?.(null);
 				this.resolveCallback = resolve;
 				this.show(type, options);
 			});
@@ -514,7 +518,7 @@ Format exactly as shown:
 						this.resolveCallback(value);
 						this.resolveCallback = null;
 					}
-				}, 200);
+				}, CONFIG.timing.modalCloseTransition);
 			}
 		},
 
@@ -661,7 +665,7 @@ Format exactly as shown:
               </div>`);
 						} else {
 							galleryItems.push(`<div class="sai-gallery-item" data-image-index="${i}">
-                <img src="${item.src}" alt="${item.alt || "Article image"}" loading="lazy" decoding="async" />
+                <img src="${escapeHtml(item.src)}" alt="${escapeHtml(item.alt || "Article image")}" loading="lazy" decoding="async" />
               </div>`);
 						}
 					}
@@ -1514,7 +1518,7 @@ Format exactly as shown:
 
 	/** @param {string} modelDisplayName */
 	function showLoadingState(modelDisplayName) {
-		Overlay.show(`<p class="sai-glow">Summarizing with ${modelDisplayName}... </p>`, {
+		Overlay.show(`<p class="sai-glow">Summarizing with ${escapeHtml(modelDisplayName)}... </p>`, {
 			isLoading: true,
 		});
 	}
@@ -1523,7 +1527,8 @@ Format exactly as shown:
 	function handleSummarizationError(error) {
 		const errorMsg = `Error: ${error.message}`;
 		console.error("Summarize with AI:", errorMsg, error);
-		Overlay.show(`<p style="color: ${CONFIG.styles.colors.error};">${errorMsg}</p>`, {
+		// The message can carry provider or response-body text, so it's escaped.
+		Overlay.show(`<p style="color: ${CONFIG.styles.colors.error};">${escapeHtml(errorMsg)}</p>`, {
 			isError: true,
 		});
 		ModelMenu.hideDropdown();
@@ -2041,11 +2046,15 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		}
 	}
 
-	/** @param {string} text */
+	/** @type {Record<string, string>} */
+	const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
+	/**
+	 * Text made safe to place in HTML, as element content or a quoted attribute value.
+	 * @param {string} text
+	 */
 	function escapeHtml(text) {
-		const div = document.createElement("div");
-		div.textContent = text;
-		return div.innerHTML;
+		return text.replace(/[&<>"']/g, ch => HTML_ESCAPES[ch]);
 	}
 
 	// --- Image Lightbox ---

@@ -11,19 +11,33 @@ const PACKAGE_JSON = "package.json";
 /** @type {(l: MetaLine) => l is Extract<MetaLine, { type: 'tag' }>} */
 const isTagLine = l => l.type === "tag";
 
+const META_OPEN = "// ==UserScript==";
+const META_CLOSE = "// ==/UserScript==";
+
+/**
+ * The userscript's text split around its metadata block (markers included).
+ * @param {string} content
+ */
+function splitMetadata(content) {
+	const start = content.indexOf(META_OPEN);
+	const close = content.indexOf(META_CLOSE);
+	if (start === -1 || close === -1) throw new Error("Could not find userscript metadata block");
+	const end = close + META_CLOSE.length;
+	return {
+		before: content.substring(0, start),
+		metadata: content.substring(start, end),
+		after: content.substring(end),
+	};
+}
+
 function formatUserscriptMetadata() {
 	console.log("Formatting userscript metadata...");
 
-	const content = readFileSync(SCRIPT_FILE, "utf-8");
-	const metaStart = content.indexOf("// ==UserScript==");
-	const metaEnd = content.indexOf("// ==/UserScript==");
-
-	if (metaStart === -1 || metaEnd === -1)
-		throw new Error("Could not find userscript metadata block");
-
-	const beforeMeta = content.substring(0, metaStart);
-	const afterMeta = content.substring(metaEnd + "// ==/UserScript==".length);
-	const metadata = content.substring(metaStart, metaEnd + "// ==/UserScript==".length);
+	const {
+		before: beforeMeta,
+		metadata,
+		after: afterMeta,
+	} = splitMetadata(readFileSync(SCRIPT_FILE, "utf-8"));
 
 	const lines = metadata.split("\n");
 	/** @type {MetaLine[]} */
@@ -31,7 +45,7 @@ function formatUserscriptMetadata() {
 
 	for (const line of lines) {
 		const trimmed = line.trim();
-		if (trimmed === "// ==UserScript==" || trimmed === "// ==/UserScript==") {
+		if (trimmed === META_OPEN || trimmed === META_CLOSE) {
 			metaLines.push({ type: "boundary", line: trimmed });
 		} else if (trimmed.startsWith("// @")) {
 			const match = trimmed.match(/^\/\/\s*(@\S+)\s+(.*)$/);
@@ -72,14 +86,7 @@ function formatUserscriptMetadata() {
 function syncMetadata() {
 	console.log(`Syncing metadata to ${META_JS}...`);
 
-	const content = readFileSync(SCRIPT_FILE, "utf-8");
-	const metaStart = content.indexOf("// ==UserScript==");
-	const metaEnd = content.indexOf("// ==/UserScript==");
-
-	if (metaStart === -1 || metaEnd === -1)
-		throw new Error("Could not find userscript metadata block");
-
-	const metadata = content.substring(metaStart, metaEnd + "// ==/UserScript==".length);
+	const { metadata } = splitMetadata(readFileSync(SCRIPT_FILE, "utf-8"));
 	writeFileSync(META_JS, `${metadata}\n`, "utf-8");
 
 	const version = metadata.match(/@version\s+(.+)/)?.[1]?.trim();

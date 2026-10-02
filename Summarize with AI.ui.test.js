@@ -780,6 +780,25 @@ describe("site-specific image filtering", () => {
 		expect(images[0].alt).toBe("Article image");
 	});
 
+	it("keeps a page image's alt text as text, even with quotes in it", async () => {
+		const alt = 'Chart" onerror="boom()';
+		const page = await loadPage({
+			url: "https://example.com/post",
+			storage: KEYED,
+			body: `<article><p>${ARTICLE_TEXT}</p><img src="https://example.com/chart.png"></article>`,
+		});
+		const img = page.$("article img");
+		img.setAttribute("alt", alt);
+		sized(img, 1000, 600);
+
+		page.byId("sai-summarize-button").click();
+		await settle();
+
+		const shown = page.$(".sai-gallery-item img");
+		expect(shown.getAttribute("alt")).toBe(alt);
+		expect(shown.hasAttribute("onerror")).toBe(false);
+	});
+
 	it("keeps McKinsey's vector exhibits but skips people photos and thumbnails", async () => {
 		const page = await loadPage({
 			url: "https://www.mckinsey.com/insights/ai",
@@ -854,6 +873,22 @@ describe("less common API responses", () => {
 		await settle();
 
 		expect(JSON.parse(/** @type {string} */ (posts(page)[0].data)).model).toBe("claude-sonnet-4-6");
+	});
+
+	it("shows markup in an API error message as text, not HTML", async () => {
+		const page = await loadPage({ storage: KEYED });
+		page.respondWith(req =>
+			req.method === "GET"
+				? defaultResponder(req)
+				: { status: 400, response: { error: { message: '<img src=x onerror="boom()">' } } },
+		);
+
+		page.byId("sai-summarize-button").click();
+		await settle();
+
+		const content = page.byId("sai-summarize-content");
+		expect(content.textContent).toContain('<img src=x onerror="boom()">');
+		expect(content.querySelector("img")).toBeNull();
 	});
 
 	it("shows an error instead of hanging when the API body is not JSON", async () => {

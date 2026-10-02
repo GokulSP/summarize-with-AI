@@ -33,7 +33,7 @@ beforeAll(() => {
 
 describe("escapeHtml", () => {
 	it("escapes HTML special characters", () => {
-		expect(helpers.escapeHtml("<b>&\"'</b>")).toBe("&lt;b&gt;&amp;\"'&lt;/b&gt;");
+		expect(helpers.escapeHtml("<b>&\"'</b>")).toBe("&lt;b&gt;&amp;&quot;&#39;&lt;/b&gt;");
 	});
 
 	it("leaves plain text untouched", () => {
