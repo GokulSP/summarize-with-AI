@@ -106,7 +106,8 @@
 	/** @typedef {{ modelConfig: ModelConfig, apiKey: string, service: Service, modelDisplayName: string }} ValidationResult */
 	/** @typedef {{ title: string, content: string, timestamp: string }} Summary */
 	/** @typedef {{ status: number, data: any, statusText?: string, service: Service }} ApiResponse */
-	/** @typedef {{ closeBtn: HTMLButtonElement | null, retryBtn: HTMLButtonElement | null, askBtn: HTMLButtonElement | null, questionInput: HTMLInputElement | null, answerContainer: HTMLElement | null, imageGallery: HTMLElement | null }} OverlayElements */
+	/** @typedef {{ setBusy: (busy: boolean) => void, showAnswer: (html: string) => void, clearQuestion: () => void }} AnswerBox */
+	/** @typedef {{ isError?: boolean, isLoading?: boolean, images?: ImageItem[] }} OverlayContentOptions */
 	/** @typedef {{ img: HTMLImageElement, iframe: HTMLIFrameElement, counter: HTMLElement, prevBtn: HTMLButtonElement, nextBtn: HTMLButtonElement, thumbnailStrip: HTMLElement }} LightboxElements */
 
 	// --- AI providers ---
@@ -338,34 +339,19 @@ Format exactly as shown:
 	};
 
 	// UI Helper Functions
-	const UIHelpers = {
-		/** @param {boolean} visible */
-		toggleDropdown(visible) {
-			if (dom.dropdown) {
-				dom.dropdown.style.display = visible ? "block" : "none";
-			}
-		},
-
-		hideDropdown() {
-			this.toggleDropdown(false);
-		},
-
-		showDropdown() {
-			this.toggleDropdown(true);
-		},
-
-		/** @param {string} message @param {boolean} [preferOverlay] */
-		showError(message, preferOverlay = false) {
-			if (preferOverlay && dom.overlay) {
-				updateSummaryOverlay(
-					`<p style="color: ${CONFIG.styles.colors.error};">${message}</p>`,
-					false,
-				);
-			} else {
-				showErrorNotification(message);
-			}
-		},
-	};
+	/**
+	 * Shows message inside the open overlay, or as a notification when none is open.
+	 * @param {string} message
+	 */
+	function showMessage(message) {
+		if (Overlay.isOpen()) {
+			Overlay.update(`<p style="color: ${CONFIG.styles.colors.error};">${message}</p>`, {
+				images: state.articleImages,
+			});
+		} else {
+			showErrorNotification(message);
+		}
+	}
 
 	// Validation Functions
 
@@ -559,23 +545,14 @@ Format exactly as shown:
 		return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 	};
 
-	/** @type {{ activeModel: string, articleData: ArticleData | null, currentSummary: Summary | null, dropdownNeedsUpdate: boolean, articleImages: ImageItem[], summaryCache: Map<string, { articleData: ArticleData | null, images: ImageItem[], summary: Summary | null }> }} */
+	// What this page's summarizing session knows. The overlay, model menu and lightbox
+	// each own their own DOM; they read this only through what they're handed.
+	/** @type {{ activeModel: string, articleData: ArticleData | null, articleImages: ImageItem[], summaryCache: Map<string, { articleData: ArticleData | null, images: ImageItem[], summary: Summary }> }} */
 	const state = {
 		activeModel: CONFIG.modelGroups.claude.models[0].id,
 		articleData: null,
-		currentSummary: null,
-		dropdownNeedsUpdate: true,
 		articleImages: [],
-		summaryCache: new Map(), // Cache summaries by model: modelId -> { articleData, images, summary }
-	};
-
-	/** @type {{ button: HTMLElement | null, dropdown: HTMLElement | null, overlay: HTMLElement | null, overlayElements: OverlayElements | null, overlayCleanup: (() => void) | null }} */
-	const dom = {
-		button: null,
-		dropdown: null,
-		overlay: null,
-		overlayElements: null,
-		overlayCleanup: null,
+		summaryCache: new Map(), // modelId -> { articleData, images, summary }
 	};
 
 	/** @param {() => void} onLongPress @param {number} [duration] */
@@ -630,7 +607,6 @@ Format exactly as shown:
 	const createElement = (tag, attrs = {}, children = []) => {
 		const el = /** @type {any} */ (document.createElement(tag));
 
-		// Use for...of for better performance than forEach
 		for (const [key, value] of Object.entries(attrs)) {
 			if (key === "style") {
 				el.style.cssText = value;
@@ -648,25 +624,31 @@ Format exactly as shown:
 		return el;
 	};
 
-	/** @param {string} contentHTML @param {boolean} [hasError] @param {boolean} [isLoading] */
-	const buildOverlayContent = (contentHTML, hasError = false, isLoading = false) => {
-		// Optimize: pre-allocate approximate string size and use single concatenation
-		let html = `<div class="sai-summary-content-body">${contentHTML}</div>`;
+	// --- Summary Overlay ---
+	// Owns the overlay element, its listeners and the Q&A box. Callers hand it content
+	// and react to what the user does through the callbacks below.
+	const Overlay = (() => {
+		/** @type {HTMLElement | null} */
+		let overlay = null;
+		/** @type {(() => void) | null} */
+		let cleanup = null;
+		/** @type {ImageItem[]} */
+		let images = [];
 
-		if (hasError) {
-			html += `<div style="text-align:center;padding-bottom:24px"><button id="${CONFIG.ids.retryButton}" class="sai-retry-button">Try Again</button></div>`;
-		} else if (!isLoading) {
-			// Add images section if available (optimized: use array join instead of string concatenation)
-			if (state.articleImages.length > 0) {
-				const galleryItems = [];
-				const displayLimit = Math.min(
-					state.articleImages.length,
-					CONFIG.limits.galleryDisplayLimit,
-				);
-				for (let i = 0; i < displayLimit; i++) {
-					const item = state.articleImages[i];
-					if (item.type === "iframe") {
-						galleryItems.push(`<div class="sai-gallery-item sai-gallery-item-iframe" data-image-index="${i}">
+		/** @param {string} contentHTML @param {OverlayContentOptions} options */
+		function buildContent(contentHTML, { isError = false, isLoading = false }) {
+			let html = `<div class="sai-summary-content-body">${contentHTML}</div>`;
+
+			if (isError) {
+				html += `<div style="text-align:center;padding-bottom:24px"><button id="${CONFIG.ids.retryButton}" class="sai-retry-button">Try Again</button></div>`;
+			} else if (!isLoading) {
+				if (images.length > 0) {
+					const galleryItems = [];
+					const displayLimit = Math.min(images.length, CONFIG.limits.galleryDisplayLimit);
+					for (let i = 0; i < displayLimit; i++) {
+						const item = images[i];
+						if (item.type === "iframe") {
+							galleryItems.push(`<div class="sai-gallery-item sai-gallery-item-iframe" data-image-index="${i}">
                 <div class="sai-iframe-preview">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -677,17 +659,16 @@ Format exactly as shown:
                   <span>Interactive Chart</span>
                 </div>
               </div>`);
-					} else {
-						galleryItems.push(`<div class="sai-gallery-item" data-image-index="${i}">
+						} else {
+							galleryItems.push(`<div class="sai-gallery-item" data-image-index="${i}">
                 <img src="${item.src}" alt="${item.alt || "Article image"}" loading="lazy" decoding="async" />
               </div>`);
+						}
 					}
+					html += `<div class="sai-image-gallery">${galleryItems.join("")}</div>`;
 				}
-				html += `<div class="sai-image-gallery">${galleryItems.join("")}</div>`;
-			}
 
-			// Add Q&A section after summary (but not during loading or error states)
-			html += `<div id="${CONFIG.ids.questionSection}" class="sai-question-section">
+				html += `<div id="${CONFIG.ids.questionSection}" class="sai-question-section">
           <div class="sai-question-header">Ask a question about this article:</div>
           <div class="sai-question-input-wrapper">
             <input
@@ -700,94 +681,145 @@ Format exactly as shown:
           </div>
           <div id="sai-answer-container" class="sai-answer-container"></div>
         </div>`;
-		}
-
-		// Add menu bar at the bottom
-		html += `<div class="sai-summary-menubar">`;
-		html += `<button id="${CONFIG.ids.closeButton}" class="sai-menubar-button" title="Close (Esc)">Close</button></div>`;
-
-		return html;
-	};
-
-	// Optimize DOM queries by caching element lookups (avoid repeated getElementById calls)
-	const attachOverlayHandlers = () => {
-		// Batch DOM queries using a single call
-		const contentElement = document.getElementById(CONFIG.ids.content);
-		if (!contentElement) return;
-
-		// Use querySelector on parent instead of multiple getElementById calls
-		const closeBtn = /** @type {HTMLButtonElement | null} */ (
-			contentElement.querySelector(`#${CONFIG.ids.closeButton}`)
-		);
-		const retryBtn = /** @type {HTMLButtonElement | null} */ (
-			contentElement.querySelector(`#${CONFIG.ids.retryButton}`)
-		);
-		const askBtn = /** @type {HTMLButtonElement | null} */ (
-			contentElement.querySelector(`#${CONFIG.ids.askButton}`)
-		);
-		const questionInput = /** @type {HTMLInputElement | null} */ (
-			contentElement.querySelector(`#${CONFIG.ids.questionInput}`)
-		);
-		const answerContainer = /** @type {HTMLElement | null} */ (
-			contentElement.querySelector("#sai-answer-container")
-		);
-
-		// Create handler functions that can be removed later
-		const handlers = {
-			close: () => closeOverlay(),
-			retry: () => processSummarization(),
-			ask: () => handleAskQuestion(),
-			/** @param {KeyboardEvent} e */
-			keypress: e => {
-				if (e.key === "Enter") handleAskQuestion();
-			},
-			/** @param {MouseEvent} e */
-			galleryClick: e => {
-				const galleryItem = /** @type {HTMLElement} */ (e.target)?.closest(".sai-gallery-item");
-				if (galleryItem instanceof HTMLElement && galleryItem.dataset.imageIndex) {
-					const index = parseInt(galleryItem.dataset.imageIndex, 10);
-					Lightbox.open(state.articleImages, index);
-				}
-			},
-		};
-
-		// Attach event listeners
-		if (closeBtn) closeBtn.addEventListener("click", handlers.close);
-		if (retryBtn) retryBtn.addEventListener("click", handlers.retry);
-		if (askBtn) askBtn.addEventListener("click", handlers.ask);
-		if (questionInput) questionInput.addEventListener("keypress", handlers.keypress);
-
-		// Optimize: Use event delegation instead of attaching handlers to each item
-		const imageGallery = /** @type {HTMLElement | null} */ (
-			contentElement.querySelector(".sai-image-gallery")
-		);
-		if (imageGallery && !imageGallery.dataset.hasListener) {
-			imageGallery.dataset.hasListener = "true";
-			imageGallery.addEventListener("click", handlers.galleryClick);
-		}
-
-		// Cache elements for reuse
-		dom.overlayElements = {
-			closeBtn,
-			retryBtn,
-			askBtn,
-			questionInput,
-			answerContainer,
-			imageGallery,
-		};
-
-		// Return cleanup function to remove all event listeners
-		return () => {
-			if (closeBtn) closeBtn.removeEventListener("click", handlers.close);
-			if (retryBtn) retryBtn.removeEventListener("click", handlers.retry);
-			if (askBtn) askBtn.removeEventListener("click", handlers.ask);
-			if (questionInput) questionInput.removeEventListener("keypress", handlers.keypress);
-			if (imageGallery) {
-				imageGallery.removeEventListener("click", handlers.galleryClick);
-				delete imageGallery.dataset.hasListener;
 			}
-		};
-	};
+
+			html += `<div class="sai-summary-menubar">`;
+			html += `<button id="${CONFIG.ids.closeButton}" class="sai-menubar-button" title="Close (Esc)">Close</button></div>`;
+			return html;
+		}
+
+		/**
+		 * Wires the freshly rendered content to the callbacks; returns the cleanup.
+		 * @param {HTMLElement} content
+		 */
+		function attachHandlers(content) {
+			const closeBtn = content.querySelector(`#${CONFIG.ids.closeButton}`);
+			const retryBtn = content.querySelector(`#${CONFIG.ids.retryButton}`);
+			const askBtn = /** @type {HTMLButtonElement | null} */ (
+				content.querySelector(`#${CONFIG.ids.askButton}`)
+			);
+			const questionInput = /** @type {HTMLInputElement | null} */ (
+				content.querySelector(`#${CONFIG.ids.questionInput}`)
+			);
+			const answerContainer = /** @type {HTMLElement | null} */ (
+				content.querySelector("#sai-answer-container")
+			);
+			const imageGallery = content.querySelector(".sai-image-gallery");
+
+			const ask = () => {
+				if (!questionInput || !answerContainer) return;
+				/** @type {AnswerBox} */
+				const answerBox = {
+					setBusy(busy) {
+						questionInput.disabled = busy;
+						if (askBtn) {
+							askBtn.disabled = busy;
+							askBtn.textContent = busy ? "Thinking..." : "Ask";
+						}
+					},
+					showAnswer(html) {
+						answerContainer.innerHTML = html;
+					},
+					clearQuestion() {
+						questionInput.value = "";
+					},
+				};
+				onAsk(questionInput.value.trim(), answerBox);
+			};
+			const handlers = {
+				close: () => close(),
+				retry: () => onRetry(),
+				ask,
+				/** @param {Event} e */
+				keypress: e => {
+					if (/** @type {KeyboardEvent} */ (e).key === "Enter") ask();
+				},
+				/** @param {Event} e */
+				galleryClick: e => {
+					const item = /** @type {HTMLElement} */ (e.target)?.closest(".sai-gallery-item");
+					if (item instanceof HTMLElement && item.dataset.imageIndex) {
+						Lightbox.open(images, parseInt(item.dataset.imageIndex, 10));
+					}
+				},
+			};
+
+			closeBtn?.addEventListener("click", handlers.close);
+			retryBtn?.addEventListener("click", handlers.retry);
+			askBtn?.addEventListener("click", handlers.ask);
+			questionInput?.addEventListener("keypress", handlers.keypress);
+			imageGallery?.addEventListener("click", handlers.galleryClick);
+
+			return () => {
+				closeBtn?.removeEventListener("click", handlers.close);
+				retryBtn?.removeEventListener("click", handlers.retry);
+				askBtn?.removeEventListener("click", handlers.ask);
+				questionInput?.removeEventListener("keypress", handlers.keypress);
+				imageGallery?.removeEventListener("click", handlers.galleryClick);
+			};
+		}
+
+		/** @param {HTMLElement} content @param {string} contentHTML @param {OverlayContentOptions} options */
+		function render(content, contentHTML, options) {
+			cleanup?.();
+			images = options.images ?? [];
+			content.innerHTML = buildContent(contentHTML, options);
+			cleanup = attachHandlers(content);
+		}
+
+		/**
+		 * Opens the overlay with this content, or replaces the content of the open one.
+		 * @param {string} contentHTML @param {OverlayContentOptions} [options]
+		 */
+		function show(contentHTML, options = {}) {
+			if (!overlay) {
+				const opened = createElement("div", { id: CONFIG.ids.overlay, className: "sai-scope" });
+				opened.appendChild(createElement("div", { id: CONFIG.ids.content }));
+				opened.onclick = e => e.target === opened && close();
+				document.body.appendChild(opened);
+				document.body.style.overflow = "hidden";
+				overlay = opened;
+			}
+			render(/** @type {HTMLElement} */ (overlay.firstElementChild), contentHTML, options);
+		}
+
+		/**
+		 * Replaces the content only if the overlay is still open (the user may have
+		 * closed it while a request was in flight).
+		 * @param {string} contentHTML @param {OverlayContentOptions} [options]
+		 */
+		function update(contentHTML, options = {}) {
+			if (overlay) show(contentHTML, options);
+		}
+
+		function close() {
+			if (!overlay) return;
+			cleanup?.();
+			cleanup = null;
+			overlay.remove();
+			overlay = null;
+			images = [];
+			document.body.style.overflow = "";
+			onClosed();
+		}
+
+		return { show, update, close, isOpen: () => overlay !== null };
+	})();
+
+	// What the overlay's buttons do. Function declarations, so they're hoisted.
+	function onRetry() {
+		processSummarization();
+	}
+
+	/** @param {string} question @param {AnswerBox} answerBox */
+	function onAsk(question, answerBox) {
+		handleAskQuestion(question, answerBox);
+	}
+
+	function onClosed() {
+		// Keep articleData and the cache for re-summarizing; drop the shown images.
+		state.articleImages = [];
+		ModelMenu.showButton();
+	}
 
 	// --- Main Functions ---
 	async function initialize() {
@@ -795,8 +827,8 @@ Format exactly as shown:
 
 		if (state.articleData) {
 			state.activeModel = await StorageService.getLastUsedModel(state.activeModel);
-			addSummarizeButton();
-			setupEventListeners();
+			ModelMenu.mount();
+			document.addEventListener("keydown", handleKeyPress);
 			injectStyles();
 		}
 	}
@@ -808,7 +840,6 @@ Format exactly as shown:
 				"script, style, noscript, iframe, figure, img, svg, header, footer, nav",
 			);
 
-			// Optimize: remove in forward order (no need to reverse iterate with NodeList)
 			for (const element of nonContentElements) {
 				element.remove();
 			}
@@ -900,8 +931,8 @@ Format exactly as shown:
 			const rules =
 				Object.entries(SITE_IMAGE_RULES).find(([host]) => hostname.includes(host))?.[1] ?? {};
 
-			// Optimized lazy loading: Use Intersection Observer API instead of forced scrolling
-			// This is non-blocking and much more performant
+			// Scroll each lazy image into view (non-blocking) so it starts loading, then give
+			// the batch a moment; a 500ms failsafe caps the wait.
 			/** @returns {Promise<void>} */
 			const triggerLazyLoading = () => {
 				return new Promise(resolve => {
@@ -967,16 +998,7 @@ Format exactly as shown:
 				const src = iframe.src || iframe.dataset.src;
 				if (!src || seen.has(src)) continue;
 
-				// Optimize: single loop check instead of multiple includes
-				let isVisualization = false;
-				for (const domain of vizDomains) {
-					if (src.includes(domain)) {
-						isVisualization = true;
-						break;
-					}
-				}
-
-				if (isVisualization) {
+				if (vizDomains.some(domain => src.includes(domain))) {
 					seen.add(src);
 					images.push({
 						src,
@@ -1036,212 +1058,217 @@ Format exactly as shown:
 		}
 	}
 
-	function addSummarizeButton() {
-		if (dom.button) return;
+	// --- Summarize Button & Model Menu ---
+	// Owns the floating S button and its model dropdown: tap summarizes, long-press
+	// opens the menu, and both hide while the user types in a page input.
+	const ModelMenu = (() => {
+		/** @type {HTMLElement | null} */
+		let button = null;
+		/** @type {HTMLElement | null} */
+		let dropdown = null;
+		// The menu is rebuilt on next open once the model list changes.
+		let stale = true;
 
-		dom.button = createElement("div", {
-			id: CONFIG.ids.button,
-			className: "sai-scope",
-			textContent: "S",
-			title: "Summarize (Alt+S) / Long Press or Tap & Hold to Select Model",
-		});
-		document.body.appendChild(dom.button);
-
-		dom.dropdown = createDropdownElement();
-		document.body.appendChild(dom.dropdown);
-		populateDropdown(dom.dropdown);
-	}
-
-	function setupEventListeners() {
-		const { button, dropdown } = dom;
-		if (!button || !dropdown) return;
-
-		const buttonPressHandler = createLongPressHandler(toggleDropdown);
-
-		document.addEventListener("keydown", handleKeyPress);
-
-		button.addEventListener("click", () => {
-			if (!buttonPressHandler.check()) processSummarization();
-		});
-
-		buttonPressHandler.attachTo(button);
-
-		// Event delegation for dropdown items
-		dropdown.addEventListener("click", (/** @type {MouseEvent} */ e) => {
-			const modelItem = /** @type {HTMLElement} */ (e.target)?.closest(
-				".sai-model-item:not(#add-custom-model)",
+		/** @param {string} text @param {Service} service */
+		function createHeader(text, service) {
+			const container = createElement("div", { className: "sai-group-header-container" });
+			container.appendChild(
+				createElement("span", { className: "sai-group-header-text", textContent: text }),
 			);
-			if (modelItem instanceof HTMLElement && modelItem.dataset.modelId) {
-				state.activeModel = modelItem.dataset.modelId;
-				StorageService.setLastUsedModel(state.activeModel);
-				UIHelpers.hideDropdown();
-				processSummarization();
+			container.appendChild(
+				createElement("a", {
+					href: "#",
+					textContent: "Reset Key",
+					className: "sai-reset-key-link",
+					title: `Reset ${text} API Key`,
+					onclick: (/** @type {MouseEvent} */ e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						onResetKey(service);
+					},
+				}),
+			);
+			return container;
+		}
+
+		/** @param {ModelEntry} modelObj @param {Service} service */
+		function createModelItem(modelObj, service) {
+			const item = createElement("div", {
+				className: "sai-model-item",
+				textContent: modelObj.name || modelObj.id,
+				title: "Click to use this model.",
+			});
+			item.dataset.modelId = modelObj.id;
+			item.dataset.service = service;
+			if (modelObj.id === activeModelId()) {
+				item.style.fontWeight = "normal";
+				item.style.color = CONFIG.styles.colors.activeModel;
 			}
-		});
+			return item;
+		}
 
-		document.addEventListener("click", handleOutsideClick);
-		setupFocusListeners();
-	}
-
-	function createDropdownElement() {
-		return createElement("div", {
-			id: CONFIG.ids.dropdown,
-			className: "sai-scope",
-			style: "display: none",
-		});
-	}
-
-	/** @param {HTMLElement} dropdownElement */
-	function populateDropdown(dropdownElement) {
-		const fragment = document.createDocumentFragment();
-
-		for (const [service, group] of Object.entries(CONFIG.modelGroups)) {
-			const models = group.models || [];
-
-			if (models.length > 0) {
-				const groupDiv = createElement("div", { className: "sai-model-group" });
-				groupDiv.appendChild(createHeader(group.name, service));
-				for (const modelObj of models) {
-					groupDiv.appendChild(createModelItem(modelObj, service));
+		/** @param {HTMLElement} menu */
+		function populate(menu) {
+			const fragment = document.createDocumentFragment();
+			for (const [serviceKey, group] of Object.entries(CONFIG.modelGroups)) {
+				const service = /** @type {Service} */ (serviceKey);
+				const models = group.models || [];
+				if (models.length > 0) {
+					const groupDiv = createElement("div", { className: "sai-model-group" });
+					groupDiv.appendChild(createHeader(group.name, service));
+					for (const modelObj of models) {
+						groupDiv.appendChild(createModelItem(modelObj, service));
+					}
+					fragment.appendChild(groupDiv);
 				}
-				fragment.appendChild(groupDiv);
 			}
+			menu.innerHTML = "";
+			menu.appendChild(fragment);
+			stale = false;
 		}
 
-		dropdownElement.innerHTML = "";
-		dropdownElement.appendChild(fragment);
-	}
+		const isDropdownOpen = () => dropdown !== null && dropdown.style.display !== "none";
 
-	/** @param {string} text @param {string} service */
-	function createHeader(text, service) {
-		const container = createElement("div", { className: "sai-group-header-container" });
+		function hideDropdown() {
+			if (dropdown) dropdown.style.display = "none";
+		}
 
-		container.appendChild(
-			createElement("span", {
-				className: "sai-group-header-text",
-				textContent: text,
-			}),
-		);
+		function toggleDropdown() {
+			if (!dropdown) return;
+			if (isDropdownOpen()) {
+				hideDropdown();
+				return;
+			}
+			if (stale) populate(dropdown);
+			dropdown.style.display = "block";
+		}
 
-		container.appendChild(
-			createElement("a", {
-				href: "#",
-				textContent: "Reset Key",
-				className: "sai-reset-key-link",
-				title: `Reset ${text} API Key`,
-				onclick: (/** @type {MouseEvent} */ e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					handleApiKeyReset(service);
+		/** @param {boolean} visible */
+		function setButtonVisible(visible) {
+			if (button) button.style.display = visible ? "flex" : "none";
+		}
+
+		/** Hides the button and menu while a page input has focus, then restores the button. */
+		function hideWhileTyping() {
+			/** @type {ReturnType<typeof setTimeout> | null} */
+			let focusOutTimer = null;
+
+			document.addEventListener("focusin", event => {
+				const target = /** @type {Element | null} */ (event.target);
+				const isModalInput = target?.closest(".sai-modal-overlay");
+				if (target?.closest(CONFIG.selectors.input) && !isModalInput) {
+					if (focusOutTimer) {
+						clearTimeout(focusOutTimer);
+						focusOutTimer = null;
+					}
+					setButtonVisible(false);
+					hideDropdown();
+				}
+			});
+
+			document.addEventListener(
+				"focusout",
+				event => {
+					const target = /** @type {Element | null} */ (event.target);
+					const relatedTarget = /** @type {Element | null} */ (event.relatedTarget);
+					const isModalInput = target?.closest(".sai-modal-overlay");
+					const isLeavingInput = target?.closest(CONFIG.selectors.input) && !isModalInput;
+					const isEnteringInput = relatedTarget?.closest(CONFIG.selectors.input);
+
+					if (isLeavingInput && !isEnteringInput && hasArticle()) {
+						focusOutTimer = setTimeout(() => {
+							if (!document.activeElement?.closest(CONFIG.selectors.input)) {
+								setButtonVisible(true);
+							}
+							focusOutTimer = null;
+						}, CONFIG.timing.focusDebounceDelay);
+					}
 				},
-			}),
-		);
-
-		return container;
-	}
-
-	/** @param {ModelEntry} modelObj @param {string} service */
-	function createModelItem(modelObj, service) {
-		const item = createElement("div", {
-			className: "sai-model-item",
-			textContent: modelObj.name || modelObj.id,
-			title: "Click to use this model.",
-		});
-
-		// Store data as attributes for event delegation
-		item.dataset.modelId = modelObj.id;
-		item.dataset.service = service;
-
-		if (modelObj.id === state.activeModel) {
-			item.style.fontWeight = "normal";
-			item.style.color = CONFIG.styles.colors.activeModel;
+				true,
+			);
 		}
 
-		return item;
+		/** Adds the button and menu to the page and wires them up (once). */
+		function mount() {
+			if (button) return;
+			const summarizeButton = createElement("div", {
+				id: CONFIG.ids.button,
+				className: "sai-scope",
+				textContent: "S",
+				title: "Summarize (Alt+S) / Long Press or Tap & Hold to Select Model",
+			});
+			const menu = createElement("div", {
+				id: CONFIG.ids.dropdown,
+				className: "sai-scope",
+				style: "display: none",
+			});
+			document.body.appendChild(summarizeButton);
+			document.body.appendChild(menu);
+			populate(menu);
+			button = summarizeButton;
+			dropdown = menu;
+
+			const longPress = createLongPressHandler(toggleDropdown);
+			summarizeButton.addEventListener("click", () => {
+				if (!longPress.check()) onSummarize();
+			});
+			longPress.attachTo(summarizeButton);
+
+			menu.addEventListener("click", (/** @type {MouseEvent} */ e) => {
+				const modelItem = /** @type {HTMLElement} */ (e.target)?.closest(
+					".sai-model-item:not(#add-custom-model)",
+				);
+				if (modelItem instanceof HTMLElement && modelItem.dataset.modelId) {
+					hideDropdown();
+					onSelectModel(modelItem.dataset.modelId);
+				}
+			});
+
+			document.addEventListener("click", (/** @type {MouseEvent} */ event) => {
+				const target = /** @type {Node} */ (event.target);
+				if (isDropdownOpen() && !menu.contains(target) && !summarizeButton.contains(target)) {
+					hideDropdown();
+				}
+			});
+			hideWhileTyping();
+		}
+
+		return {
+			mount,
+			isMounted: () => button !== null,
+			showButton: () => setButtonVisible(true),
+			hideButton: () => setButtonVisible(false),
+			isDropdownOpen,
+			hideDropdown,
+			markStale: () => {
+				stale = true;
+			},
+		};
+	})();
+
+	// What the model menu reads and does. Function declarations, so they're hoisted.
+	function activeModelId() {
+		return state.activeModel;
 	}
 
-	function toggleDropdown() {
-		if (!dom.dropdown) return;
-		if (dom.dropdown.style.display === "none") {
-			if (state.dropdownNeedsUpdate) {
-				populateDropdown(dom.dropdown);
-				state.dropdownNeedsUpdate = false;
-			}
-			UIHelpers.showDropdown();
-		} else {
-			UIHelpers.hideDropdown();
-		}
+	function hasArticle() {
+		return state.articleData !== null;
 	}
 
-	/** @param {MouseEvent} event */
-	function handleOutsideClick(event) {
-		const target = /** @type {Node} */ (event.target);
-		if (
-			dom.dropdown &&
-			dom.dropdown.style.display !== "none" &&
-			!dom.dropdown.contains(target) &&
-			!dom.button?.contains(target)
-		) {
-			UIHelpers.hideDropdown();
-		}
+	function onSummarize() {
+		processSummarization();
 	}
 
-	/** @param {string} contentHTML @param {boolean} [isError] @param {boolean} [isLoading] */
-	function showSummaryOverlay(contentHTML, isError = false, isLoading = false) {
-		if (dom.overlay) {
-			updateSummaryOverlay(contentHTML, isError, isLoading);
-			return;
-		}
-
-		dom.overlay = createElement("div", { id: CONFIG.ids.overlay, className: "sai-scope" });
-		dom.overlay.innerHTML = `<div id="${CONFIG.ids.content}">${buildOverlayContent(contentHTML, isError, isLoading)}</div>`;
-
-		document.body.appendChild(dom.overlay);
-		document.body.style.overflow = "hidden";
-
-		// Store cleanup function for proper event listener removal
-		dom.overlayCleanup = attachOverlayHandlers() ?? null;
-		dom.overlay.onclick = e => e.target === dom.overlay && closeOverlay();
+	/** @param {string} modelId */
+	function onSelectModel(modelId) {
+		state.activeModel = modelId;
+		StorageService.setLastUsedModel(modelId);
+		processSummarization();
 	}
 
-	function closeOverlay() {
-		if (dom.overlay) {
-			// Cleanup event listeners before removing overlay
-			if (dom.overlayCleanup) {
-				dom.overlayCleanup();
-				dom.overlayCleanup = null;
-			}
-
-			dom.overlay.remove();
-			dom.overlay = null;
-			dom.overlayElements = null;
-			document.body.style.overflow = "";
-
-			// Memory cleanup: clear temporary display data
-			// Note: Keep state.articleData intact for re-summarization and cache lookup
-			state.currentSummary = null;
-			state.articleImages = [];
-
-			// Show the summary button again after closing overlay
-			if (dom.button) dom.button.style.display = "flex";
-		}
-	}
-
-	/** @param {string} contentHTML @param {boolean} [isError] @param {boolean} [isLoading] */
-	function updateSummaryOverlay(contentHTML, isError = false, isLoading = false) {
-		const contentDiv = document.getElementById(CONFIG.ids.content);
-		if (contentDiv) {
-			// Cleanup old event listeners before updating content
-			if (dom.overlayCleanup) {
-				dom.overlayCleanup();
-				dom.overlayCleanup = null;
-			}
-
-			contentDiv.innerHTML = buildOverlayContent(contentHTML, isError, isLoading);
-
-			// Reattach handlers with new cleanup function
-			dom.overlayCleanup = attachOverlayHandlers() ?? null;
-		}
+	/** @param {Service} service */
+	function onResetKey(service) {
+		handleApiKeyReset(service);
 	}
 
 	/** @param {string} message */
@@ -1333,7 +1360,7 @@ Format exactly as shown:
 			state.activeModel = latest.id;
 			StorageService.setLastUsedModel(state.activeModel);
 		}
-		state.dropdownNeedsUpdate = true;
+		ModelMenu.markStale();
 	}
 
 	async function validateModelAndApiKey() {
@@ -1361,8 +1388,9 @@ Format exactly as shown:
 
 		const apiKey = await StorageService.getApiKey(service);
 		if (!apiKey) {
-			const errorMsg = `${toTitleCase(service)} API key is required. To add one, long-press the S button and select Reset Key.`;
-			UIHelpers.showError(errorMsg, true);
+			showMessage(
+				`${toTitleCase(service)} API key is required. To add one, long-press the S button and select Reset Key.`,
+			);
 			return null;
 		}
 
@@ -1376,8 +1404,7 @@ Format exactly as shown:
 
 	async function processSummarization() {
 		try {
-			// Hide the summary button during summarization
-			if (dom.button) dom.button.style.display = "none";
+			ModelMenu.hideButton();
 
 			// Re-extract on every click (not just at page load) so content revealed after
 			// load — e.g. clicking a "Transcript" tab — is picked up. Readability's own
@@ -1388,8 +1415,7 @@ Format exactly as shown:
 				showErrorNotification(
 					"Unable to extract article content. Please try selecting text manually.",
 				);
-				// Show button again if validation fails
-				if (dom.button) dom.button.style.display = "flex";
+				ModelMenu.showButton();
 				return;
 			}
 
@@ -1401,8 +1427,7 @@ Format exactly as shown:
 
 			const validationResult = await validateModelAndApiKey();
 			if (!validationResult) {
-				// Show button again if validation fails
-				if (dom.button) dom.button.style.display = "flex";
+				ModelMenu.showButton();
 				return;
 			}
 
@@ -1411,13 +1436,9 @@ Format exactly as shown:
 			// Check cache first - use cached summary if available for this model
 			const cachedData = state.summaryCache.get(modelConfig.id);
 			if (cachedData?.summary) {
-				// Restore from cache
 				state.articleData = cachedData.articleData;
 				state.articleImages = cachedData.images;
-				state.currentSummary = cachedData.summary;
-
-				// Show cached summary immediately
-				showSummaryOverlay(cachedData.summary.content);
+				Overlay.show(cachedData.summary.content, { images: cachedData.images });
 				return;
 			}
 
@@ -1427,8 +1448,7 @@ Format exactly as shown:
 			await executeSummarization(articleData, validationResult);
 		} catch (/** @type {any} */ error) {
 			handleSummarizationError(error);
-			// Show button again on error
-			if (dom.button) dom.button.style.display = "flex";
+			ModelMenu.showButton();
 		}
 	}
 
@@ -1494,20 +1514,19 @@ Format exactly as shown:
 
 	/** @param {string} modelDisplayName */
 	function showLoadingState(modelDisplayName) {
-		const loadingMessage = `<p class="sai-glow">Summarizing with ${modelDisplayName}... </p>`;
-		if (dom.overlay) {
-			updateSummaryOverlay(loadingMessage, false, true);
-		} else {
-			showSummaryOverlay(loadingMessage, false, true);
-		}
+		Overlay.show(`<p class="sai-glow">Summarizing with ${modelDisplayName}... </p>`, {
+			isLoading: true,
+		});
 	}
 
 	/** @param {Error} error */
 	function handleSummarizationError(error) {
 		const errorMsg = `Error: ${error.message}`;
 		console.error("Summarize with AI:", errorMsg, error);
-		showSummaryOverlay(`<p style="color: ${CONFIG.styles.colors.error};">${errorMsg}</p>`, true);
-		UIHelpers.hideDropdown();
+		Overlay.show(`<p style="color: ${CONFIG.styles.colors.error};">${errorMsg}</p>`, {
+			isError: true,
+		});
+		ModelMenu.hideDropdown();
 	}
 
 	/**
@@ -1612,7 +1631,6 @@ Format exactly as shown:
 		}
 	}
 
-	// Consolidated regex patterns at module level for better performance and maintainability
 	const REGEX_PATTERNS = {
 		// Summary cleaning patterns
 		cleanSummary: {
@@ -1826,20 +1844,16 @@ Format exactly as shown:
 	function handleApiResponse(response) {
 		const { rawSummary } = extractSummaryFromResponse(response);
 		const cleanedSummary = cleanSummaryHTML(rawSummary);
-		state.currentSummary = {
-			title: state.articleData?.title || "Untitled",
-			content: cleanedSummary,
-			timestamp: new Date().toISOString(),
-		};
-
-		// Cache the summary with article data and images for this model
 		state.summaryCache.set(state.activeModel, {
 			articleData: state.articleData,
 			images: state.articleImages,
-			summary: state.currentSummary,
+			summary: {
+				title: state.articleData?.title || "Untitled",
+				content: cleanedSummary,
+				timestamp: new Date().toISOString(),
+			},
 		});
-
-		updateSummaryOverlay(cleanedSummary, false);
+		Overlay.update(cleanedSummary, { images: state.articleImages });
 	}
 
 	/** @param {string} service */
@@ -1966,12 +1980,8 @@ Format exactly as shown:
 		return result.join("\n");
 	}
 
-	async function handleAskQuestion() {
-		const { questionInput, answerContainer, askBtn } = dom.overlayElements || {};
-
-		if (!questionInput || !answerContainer) return;
-
-		const question = questionInput.value.trim();
+	/** @param {string} question @param {AnswerBox} answerBox */
+	async function handleAskQuestion(question, answerBox) {
 		if (!question) {
 			showErrorNotification("Please enter a question.");
 			return;
@@ -1982,12 +1992,7 @@ Format exactly as shown:
 			return;
 		}
 
-		// Disable input while processing
-		questionInput.disabled = true;
-		if (askBtn) {
-			askBtn.disabled = true;
-			askBtn.textContent = "Thinking...";
-		}
+		answerBox.setBusy(true);
 
 		try {
 			const validationResult = await validateModelAndApiKey();
@@ -2019,26 +2024,20 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			// Format the answer with proper HTML structure
 			const formattedAnswer = formatQAAnswer(answer);
 
-			// Display answer
-			answerContainer.innerHTML = `
+			answerBox.showAnswer(`
         <div class="sai-answer">
           <p><strong>Q:</strong> ${escapeHtml(question)}</p>
           <div class="sai-answer-content">${formattedAnswer}</div>
         </div>
-      `;
-
-			// Clear input
-			questionInput.value = "";
+      `);
+			answerBox.clearQuestion();
 		} catch (/** @type {any} */ error) {
 			console.error("Ask question failed:", error);
-			answerContainer.innerHTML = `<p style="color: ${CONFIG.styles.colors.error};">Error: ${escapeHtml(error.message)}</p>`;
+			answerBox.showAnswer(
+				`<p style="color: ${CONFIG.styles.colors.error};">Error: ${escapeHtml(error.message)}</p>`,
+			);
 		} finally {
-			// Re-enable input
-			questionInput.disabled = false;
-			if (askBtn) {
-				askBtn.disabled = false;
-				askBtn.textContent = "Ask";
-			}
+			answerBox.setBusy(false);
 		}
 	}
 
@@ -2488,65 +2487,24 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		return { open: openLightbox };
 	})();
 
-	// --- Event Handlers & Utilities ---
+	// --- Keyboard Shortcuts ---
 	/** @param {KeyboardEvent} e */
 	function handleKeyPress(e) {
 		if (e.altKey && e.code === "KeyS" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
 			e.preventDefault();
-			if (dom.button && !document.activeElement?.closest(CONFIG.selectors.input)) {
+			if (ModelMenu.isMounted() && !document.activeElement?.closest(CONFIG.selectors.input)) {
 				processSummarization();
 			}
 		}
 		if (e.key === "Escape") {
-			if (dom.overlay) {
+			if (Overlay.isOpen()) {
 				e.preventDefault();
-				closeOverlay();
-			} else if (dom.dropdown && dom.dropdown.style.display !== "none") {
+				Overlay.close();
+			} else if (ModelMenu.isDropdownOpen()) {
 				e.preventDefault();
-				dom.dropdown.style.display = "none";
+				ModelMenu.hideDropdown();
 			}
 		}
-	}
-
-	function setupFocusListeners() {
-		/** @type {ReturnType<typeof setTimeout> | null} */
-		let focusOutTimer = null;
-
-		document.addEventListener("focusin", event => {
-			const target = /** @type {Element | null} */ (event.target);
-			// Exclude modal inputs from hiding the button
-			const isModalInput = target?.closest(".sai-modal-overlay");
-			if (target?.closest(CONFIG.selectors.input) && !isModalInput) {
-				if (focusOutTimer) {
-					clearTimeout(focusOutTimer);
-					focusOutTimer = null;
-				}
-				if (dom.button) dom.button.style.display = "none";
-				if (dom.dropdown) dom.dropdown.style.display = "none";
-			}
-		});
-
-		document.addEventListener(
-			"focusout",
-			event => {
-				const target = /** @type {Element | null} */ (event.target);
-				const relatedTarget = /** @type {Element | null} */ (event.relatedTarget);
-				// Exclude modal inputs from the restore logic
-				const isModalInput = target?.closest(".sai-modal-overlay");
-				const isLeavingInput = target?.closest(CONFIG.selectors.input) && !isModalInput;
-				const isEnteringInput = relatedTarget?.closest(CONFIG.selectors.input);
-
-				if (isLeavingInput && !isEnteringInput && state.articleData) {
-					focusOutTimer = setTimeout(() => {
-						if (!document.activeElement?.closest(CONFIG.selectors.input)) {
-							if (dom.button) dom.button.style.display = "flex";
-						}
-						focusOutTimer = null;
-					}, CONFIG.timing.focusDebounceDelay);
-				}
-			},
-			true,
-		);
 	}
 
 	function injectStyles() {
