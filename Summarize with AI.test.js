@@ -13,7 +13,7 @@ const USER_JS_PATH = path.join(
 /**
  * Runs the userscript source in a sandbox with a fake `module`, so its guarded
  * `module.exports` block fires (skipping `initialize()`) instead of running as a browser script.
- * @type {{escapeHtml: Function, formatQAAnswer: Function, cleanSummaryHTML: Function, mergeParams: Function, extractSummaryFromResponse: Function}}
+ * @type {{escapeHtml: Function, formatQAAnswer: Function, cleanSummaryHTML: Function, extractSummaryFromResponse: Function}}
  */
 let helpers;
 
@@ -38,12 +38,6 @@ describe("escapeHtml", () => {
 
 	it("leaves plain text untouched", () => {
 		expect(helpers.escapeHtml("hello world")).toBe("hello world");
-	});
-});
-
-describe("mergeParams", () => {
-	it("lets model-specific params override service defaults", () => {
-		expect(helpers.mergeParams({ a: 1, b: 2 }, { b: 3, c: 4 })).toEqual({ a: 1, b: 3, c: 4 });
 	});
 });
 

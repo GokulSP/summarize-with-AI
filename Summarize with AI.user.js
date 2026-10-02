@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/summarize-with-AI
-// @version     2026.10.01.01
+// @version     2026.10.02.01
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (or tap-and-hold on mobile) to select model. Allows adding custom models. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -79,15 +79,10 @@
 		modelGroups: {
 			claude: {
 				name: "Claude",
-				baseUrl: "https://api.anthropic.com/v1/messages",
 				models: [{ id: "claude-sonnet-4-6", name: "Sonnet" }],
-				get defaultParams() {
-					return { max_tokens: CONFIG.limits.defaultMaxTokens };
-				},
 			},
 			gemini: {
 				name: "Gemini",
-				baseUrl: "https://generativelanguage.googleapis.com/v1beta/models",
 				models: [{ id: "gemini-3.5-flash", name: "Flash" }],
 			},
 		},
@@ -113,6 +108,140 @@
 	/** @typedef {{ status: number, data: any, statusText?: string, service: Service }} ApiResponse */
 	/** @typedef {{ closeBtn: HTMLButtonElement | null, retryBtn: HTMLButtonElement | null, askBtn: HTMLButtonElement | null, questionInput: HTMLInputElement | null, answerContainer: HTMLElement | null, imageGallery: HTMLElement | null }} OverlayElements */
 	/** @typedef {{ img: HTMLImageElement, iframe: HTMLIFrameElement, counter: HTMLElement, prevBtn: HTMLButtonElement, nextBtn: HTMLButtonElement, thumbnailStrip: HTMLElement }} LightboxElements */
+
+	// --- AI providers ---
+	// Everything that differs between Claude and Gemini lives here, so the rest of the script
+	// never names a provider: how to build a request, read its response, discover the latest
+	// model (and cache it), and any model to fall back to. Adding a provider is one entry here
+	// plus its CONFIG.modelGroups entry for the dropdown.
+	/**
+	 * @typedef {object} Provider
+	 * @property {string} idPrefix model ids starting with this belong to the provider
+	 * @property {(apiKey: string, prompt: string, modelId: string, maxTokens: number) => { url: string, headers: Record<string, string>, body: object }} request
+	 * @property {(data: any) => { rawSummary: string, finishReason: string | null, blockType: string | null }} parse
+	 * @property {string} truncatedReason the finishReason meaning the max token limit cut it short
+	 * @property {{ cacheKey: string, activePrefix: string, name: string, label: string, fetchId: (apiKey: string) => Promise<string> }} latest
+	 * @property {{ model: ModelConfig, reason: string, appliesTo: (error: Error) => boolean }} [fallback]
+	 */
+
+	const ANTHROPIC_HEADERS = {
+		"anthropic-version": "2023-06-01",
+		"anthropic-dangerous-direct-browser-access": "true",
+	};
+
+	/** @type {Record<Service, Provider>} */
+	const PROVIDERS = {
+		claude: {
+			idPrefix: "claude",
+			request: (apiKey, prompt, modelId, maxTokens) => ({
+				url: "https://api.anthropic.com/v1/messages",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey, ...ANTHROPIC_HEADERS },
+				body: {
+					model: modelId,
+					messages: [{ role: "user", content: prompt }],
+					max_tokens: maxTokens,
+				},
+			}),
+			parse: data => {
+				// Extended-thinking responses prepend a `thinking` block before the `text` block.
+				const blocks = data?.content || [];
+				const textBlock = blocks.find((/** @type {any} */ b) => b.type === "text") || blocks[0];
+				return {
+					rawSummary: textBlock?.text || "",
+					finishReason: data?.stop_reason || null,
+					blockType: textBlock?.type || null,
+				};
+			},
+			truncatedReason: "max_tokens",
+			latest: {
+				cacheKey: "latest_sonnet_cache",
+				activePrefix: "claude-sonnet",
+				name: "Sonnet",
+				label: "Sonnet",
+				fetchId: async apiKey => {
+					const data = await fetchModelsList("https://api.anthropic.com/v1/models", {
+						"x-api-key": apiKey,
+						...ANTHROPIC_HEADERS,
+					});
+					/** @type {{ id: string }[]} */
+					const sonnetModels = (data.data || [])
+						.filter((/** @type {{ id: string }} */ m) => m.id?.startsWith("claude-sonnet"))
+						.sort((/** @type {{ id: string }} */ a, /** @type {{ id: string }} */ b) =>
+							b.id.localeCompare(a.id),
+						);
+					if (sonnetModels.length === 0) throw new Error("No Sonnet models found");
+					return sonnetModels[0].id;
+				},
+			},
+		},
+		gemini: {
+			idPrefix: "gemini",
+			// The API key goes in the URL, not a header.
+			request: (apiKey, prompt, modelId) => ({
+				url: `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
+				headers: { "Content-Type": "application/json" },
+				body: { contents: [{ parts: [{ text: prompt }] }] },
+			}),
+			parse: data => {
+				// { candidates: [{ content: { parts: [{ text }] } }] }; thinking-enabled models may
+				// prepend parts with `thought: true` before the answer part.
+				const candidate = data?.candidates?.[0];
+				const parts = candidate?.content?.parts || [];
+				const answerPart = parts.find((/** @type {any} */ p) => p.text && !p.thought) || parts[0];
+				return {
+					rawSummary: answerPart?.text || "",
+					finishReason: candidate?.finishReason || null,
+					blockType: answerPart?.thought ? "thought" : null,
+				};
+			},
+			truncatedReason: "MAX_TOKENS",
+			latest: {
+				cacheKey: "latest_gemini_cache",
+				activePrefix: "gemini",
+				name: "Flash",
+				label: "Gemini",
+				fetchId: async apiKey => {
+					const data = await fetchModelsList(
+						`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+					);
+					// Exclude flash variants built for a different call shape (live/interactions,
+					// audio, image, tts, managed agents) even though they list generateContent support.
+					const NON_TEXT_VARIANT =
+						/live|audio|tts|image|native-audio|realtime|computer-use|agent|deep-research|antigravity|interaction/;
+					/** @typedef {{ name: string, supportedGenerationMethods?: string[] }} GeminiModel */
+					/** @type {string[]} */
+					const flashModels = (data.models || [])
+						.filter((/** @type {GeminiModel} */ m) => {
+							const id = m.name?.replace("models/", "");
+							return (
+								id?.includes("flash") &&
+								!NON_TEXT_VARIANT.test(id) &&
+								(m.supportedGenerationMethods || []).includes("generateContent")
+							);
+						})
+						.map((/** @type {GeminiModel} */ m) => m.name.replace("models/", ""))
+						.sort((/** @type {string} */ a, /** @type {string} */ b) => b.localeCompare(a));
+					if (flashModels.length === 0) throw new Error("No Gemini Flash models found");
+					return flashModels[0];
+				},
+			},
+			// An auto-discovered model can need the Interactions API, which generateContent
+			// can't call; the stable seed model always works.
+			fallback: {
+				model: { id: "gemini-3.5-flash", name: "Flash", service: "gemini" },
+				reason: "Auto-discovered Gemini model requires the Interactions API",
+				appliesTo: error => /Interactions API/i.test(error.message),
+			},
+		},
+	};
+
+	/** @param {string} modelId @returns {Service | null} */
+	const serviceForModelId = modelId =>
+		/** @type {Service | undefined} */ (
+			Object.keys(PROVIDERS).find(s =>
+				modelId.startsWith(PROVIDERS[/** @type {Service} */ (s)].idPrefix),
+			)
+		) ?? null;
 
 	/** @param {string} title @param {string} content */
 	const PROMPT_TEMPLATE = (title, content) => `Target: ~${CONFIG.limits.targetWordCount} words
@@ -151,8 +280,6 @@ Format exactly as shown:
 	const StorageService = {
 		keys: {
 			LAST_USED_MODEL: "last_used_model",
-			SONNET_CACHE: "latest_sonnet_cache",
-			GEMINI_CACHE: "latest_gemini_cache",
 			/** @param {string} service */
 			API_KEY: service => `${service}_api_key`,
 		},
@@ -192,30 +319,21 @@ Format exactly as shown:
 			return await GM.setValue(this.keys.API_KEY(service), keyToSave);
 		},
 
-		async getLatestSonnetCache() {
+		/** @param {string} cacheKey */
+		async getModelCache(cacheKey) {
 			return /** @type {{ modelId: string, timestamp: number } | null} */ (
-				await GM.getValue(this.keys.SONNET_CACHE, null)
+				await GM.getValue(cacheKey, null)
 			);
 		},
 
-		/** @param {string} modelId */
-		async setLatestSonnetCache(modelId) {
-			await GM.setValue(this.keys.SONNET_CACHE, { modelId, timestamp: Date.now() });
+		/** @param {string} cacheKey @param {string} modelId */
+		async setModelCache(cacheKey, modelId) {
+			await GM.setValue(cacheKey, { modelId, timestamp: Date.now() });
 		},
 
-		async getLatestGeminiCache() {
-			return /** @type {{ modelId: string, timestamp: number } | null} */ (
-				await GM.getValue(this.keys.GEMINI_CACHE, null)
-			);
-		},
-
-		/** @param {string} modelId */
-		async setLatestGeminiCache(modelId) {
-			await GM.setValue(this.keys.GEMINI_CACHE, { modelId, timestamp: Date.now() });
-		},
-
-		async clearLatestGeminiCache() {
-			await GM.setValue(this.keys.GEMINI_CACHE, null);
+		/** @param {string} cacheKey */
+		async clearModelCache(cacheKey) {
+			await GM.setValue(cacheKey, null);
 		},
 	};
 
@@ -532,12 +650,6 @@ Format exactly as shown:
 
 		return el;
 	};
-
-	/** @param {Record<string, any>} serviceDefaults @param {Record<string, any>} [modelParams] */
-	const mergeParams = (serviceDefaults, modelParams) => ({
-		...serviceDefaults,
-		...modelParams,
-	});
 
 	/** @param {string} contentHTML @param {boolean} [hasError] @param {boolean} [isLoading] */
 	const buildOverlayContent = (contentHTML, hasError = false, isLoading = false) => {
@@ -1224,15 +1336,11 @@ Format exactly as shown:
 
 	// Refreshes CONFIG.modelGroups[service]'s seed model to the auto-discovered latest one,
 	// and follows state.activeModel along if it was still pointing at that service's model.
-	/**
-	 * @param {keyof typeof CONFIG.modelGroups} service
-	 * @param {string} activePrefix
-	 * @param {(apiKey: string) => Promise<ModelEntry | null>} resolver
-	 * @param {string} apiKey
-	 */
-	async function syncLatestModel(service, activePrefix, resolver, apiKey) {
-		const latest = await resolver(apiKey);
+	/** @param {Service} service @param {string} apiKey */
+	async function syncLatestModel(service, apiKey) {
+		const latest = await resolveLatestModel(service, apiKey);
 		if (!latest) return;
+		const { activePrefix } = PROVIDERS[service].latest;
 
 		const currentEntry = CONFIG.modelGroups[service].models[0];
 		if (currentEntry.id === latest.id) return;
@@ -1253,11 +1361,7 @@ Format exactly as shown:
 			// prior session that no longer matches the freshly-initialized seed list).
 			// Fall back to that service's seed model so the auto-discovery below can
 			// reconcile state.activeModel to the current latest model.
-			const fallbackService = state.activeModel.startsWith("gemini")
-				? "gemini"
-				: state.activeModel.startsWith("claude")
-					? "claude"
-					: null;
+			const fallbackService = serviceForModelId(state.activeModel);
 			if (fallbackService) {
 				state.activeModel = CONFIG.modelGroups[fallbackService].models[0].id;
 				modelConfig = getActiveModelConfig();
@@ -1280,11 +1384,7 @@ Format exactly as shown:
 			return null;
 		}
 
-		if (service === "claude") {
-			await syncLatestModel("claude", "claude-sonnet", resolveLatestSonnetModel, apiKey);
-		} else if (service === "gemini") {
-			await syncLatestModel("gemini", "gemini", resolveLatestGeminiModel, apiKey);
-		}
+		await syncLatestModel(service, apiKey);
 
 		const finalModelConfig = getActiveModelConfig() ?? modelConfig;
 		const finalDisplayName = finalModelConfig.name || finalModelConfig.id;
@@ -1352,9 +1452,6 @@ Format exactly as shown:
 
 	// Known-stable text model to fall back to if the auto-discovered "latest flash"
 	// model turns out to be a managed-agent/live variant requiring the Interactions API.
-	/** @type {ModelConfig} */
-	const GEMINI_SAFE_FALLBACK = { id: "gemini-3.5-flash", name: "Flash", service: "gemini" };
-
 	/** @param {Error} error @param {string} modelId */
 	function annotateModelError(error, modelId) {
 		error.message = `[${modelId}] ${error.message}`;
@@ -1396,28 +1493,19 @@ Format exactly as shown:
 			const response = await sendApiRequestWithRetry(service, apiKey, prompt, modelConfig);
 			handleApiResponse(response);
 		} catch (/** @type {any} */ error) {
+			const { fallback, latest } = PROVIDERS[service];
 			const canFallBack =
-				service === "gemini" &&
-				modelConfig.id !== GEMINI_SAFE_FALLBACK.id &&
-				/Interactions API/i.test(error.message);
+				fallback && modelConfig.id !== fallback.model.id && fallback.appliesTo(error);
 			if (!canFallBack) throw annotateModelError(error, modelConfig.id);
 
-			console.warn(
-				"Summarize with AI: Auto-discovered Gemini model requires the Interactions API, retrying with",
-				GEMINI_SAFE_FALLBACK.id,
-			);
-			await StorageService.clearLatestGeminiCache();
-			showLoadingState(GEMINI_SAFE_FALLBACK.name);
+			console.warn(`Summarize with AI: ${fallback.reason}, retrying with`, fallback.model.id);
+			await StorageService.clearModelCache(latest.cacheKey);
+			showLoadingState(fallback.model.name);
 			try {
-				const response = await sendApiRequestWithRetry(
-					service,
-					apiKey,
-					prompt,
-					GEMINI_SAFE_FALLBACK,
-				);
+				const response = await sendApiRequestWithRetry(service, apiKey, prompt, fallback.model);
 				handleApiResponse(response);
 			} catch (/** @type {any} */ fallbackError) {
-				throw annotateModelError(fallbackError, GEMINI_SAFE_FALLBACK.id);
+				throw annotateModelError(fallbackError, fallback.model.id);
 			}
 		}
 	}
@@ -1445,22 +1533,26 @@ Format exactly as shown:
 	 * @param {ModelConfig} modelConfig @param {number} [maxTokens]
 	 * @returns {Promise<ApiResponse>}
 	 */
-	async function sendApiRequest(service, apiKey, prompt, modelConfig, maxTokens) {
-		const group = CONFIG.modelGroups[service];
-		let url = group.baseUrl;
-		const requestBody = buildRequestBody(prompt, modelConfig, service, maxTokens);
-
-		// For Gemini, append model ID and API key to URL
-		if (service === "gemini") {
-			url = `${url}/${modelConfig.id}:generateContent?key=${apiKey}`;
-		}
+	async function sendApiRequest(
+		service,
+		apiKey,
+		prompt,
+		modelConfig,
+		maxTokens = CONFIG.limits.defaultMaxTokens,
+	) {
+		const { url, headers, body } = PROVIDERS[service].request(
+			apiKey,
+			prompt,
+			modelConfig.id,
+			maxTokens,
+		);
 
 		return new Promise((resolve, reject) => {
 			GM.xmlHttpRequest({
 				method: "POST",
 				url,
-				headers: getHeaders(apiKey, service),
-				data: JSON.stringify(requestBody),
+				headers,
+				data: JSON.stringify(body),
 				responseType: "json",
 				timeout: CONFIG.timing.apiRequestTimeout,
 				onload: response => {
@@ -1513,68 +1605,20 @@ Format exactly as shown:
 		});
 	}
 
-	/** @param {string} apiKey @returns {Promise<string>} */
-	async function fetchLatestSonnetModel(apiKey) {
-		const data = await fetchModelsList("https://api.anthropic.com/v1/models", {
-			"x-api-key": apiKey,
-			"anthropic-version": "2023-06-01",
-			"anthropic-dangerous-direct-browser-access": "true",
-		});
-		/** @type {{ id: string }[]} */
-		const sonnetModels = (data.data || [])
-			.filter((/** @type {{ id: string }} */ m) => m.id?.startsWith("claude-sonnet"))
-			.sort((/** @type {{ id: string }} */ a, /** @type {{ id: string }} */ b) =>
-				b.id.localeCompare(a.id),
-			);
-		if (sonnetModels.length === 0) throw new Error("No Sonnet models found");
-		return sonnetModels[0].id;
-	}
-
-	/** @param {string} apiKey @returns {Promise<string>} */
-	async function fetchLatestGeminiFlashModel(apiKey) {
-		const data = await fetchModelsList(
-			`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
-		);
-		// Exclude flash variants built for a different call shape (live/interactions,
-		// audio, image, tts, managed agents) even though they list generateContent support.
-		const NON_TEXT_VARIANT =
-			/live|audio|tts|image|native-audio|realtime|computer-use|agent|deep-research|antigravity|interaction/;
-		/** @typedef {{ name: string, supportedGenerationMethods?: string[] }} GeminiModel */
-		/** @type {string[]} */
-		const flashModels = (data.models || [])
-			.filter((/** @type {GeminiModel} */ m) => {
-				const id = m.name?.replace("models/", "");
-				return (
-					id?.includes("flash") &&
-					!NON_TEXT_VARIANT.test(id) &&
-					(m.supportedGenerationMethods || []).includes("generateContent")
-				);
-			})
-			.map((/** @type {GeminiModel} */ m) => m.name.replace("models/", ""))
-			.sort((/** @type {string} */ a, /** @type {string} */ b) => b.localeCompare(a));
-		if (flashModels.length === 0) throw new Error("No Gemini Flash models found");
-		return flashModels[0];
-	}
-
 	const MODEL_CACHE_TTL = 24 * 60 * 60 * 1000;
 
-	// Shared cache-check -> fetch -> cache-store -> catch-and-warn-null flow for both providers'
-	// "latest model" resolution; only the cache accessors, fetcher, and display name differ.
-	/**
-	 * @param {() => Promise<{ modelId: string, timestamp: number } | null>} getCache
-	 * @param {(id: string) => Promise<void>} setCache
-	 * @param {(apiKey: string) => Promise<string>} fetchModel
-	 * @param {string} name @param {string} apiKey @param {string} label
-	 * @returns {Promise<ModelEntry | null>}
-	 */
-	async function resolveLatestModel(getCache, setCache, fetchModel, name, apiKey, label) {
+	// Cache-check -> fetch -> cache-store, warning and returning null (keep the seed model)
+	// when discovery fails; only the provider's cache key and fetch differ.
+	/** @param {Service} service @param {string} apiKey @returns {Promise<ModelEntry | null>} */
+	async function resolveLatestModel(service, apiKey) {
+		const { cacheKey, fetchId, name, label } = PROVIDERS[service].latest;
 		try {
-			const cached = await getCache();
+			const cached = await StorageService.getModelCache(cacheKey);
 			if (cached && Date.now() - cached.timestamp < MODEL_CACHE_TTL) {
 				return { id: cached.modelId, name };
 			}
-			const modelId = await fetchModel(apiKey);
-			await setCache(modelId);
+			const modelId = await fetchId(apiKey);
+			await StorageService.setModelCache(cacheKey, modelId);
 			return { id: modelId, name };
 		} catch (/** @type {any} */ err) {
 			console.warn(
@@ -1583,30 +1627,6 @@ Format exactly as shown:
 			);
 			return null;
 		}
-	}
-
-	/** @param {string} apiKey */
-	function resolveLatestSonnetModel(apiKey) {
-		return resolveLatestModel(
-			() => StorageService.getLatestSonnetCache(),
-			id => StorageService.setLatestSonnetCache(id),
-			fetchLatestSonnetModel,
-			"Sonnet",
-			apiKey,
-			"Sonnet",
-		);
-	}
-
-	/** @param {string} apiKey */
-	function resolveLatestGeminiModel(apiKey) {
-		return resolveLatestModel(
-			() => StorageService.getLatestGeminiCache(),
-			id => StorageService.setLatestGeminiCache(id),
-			fetchLatestGeminiFlashModel,
-			"Flash",
-			apiKey,
-			"Gemini",
-		);
 	}
 
 	// Consolidated regex patterns at module level for better performance and maintainability
@@ -1796,36 +1816,10 @@ Format exactly as shown:
 			throw new Error(`API Error (${status}): ${errorDetails}`);
 		}
 
-		let rawSummary = "";
-		let finishReason = null;
-		let blockType = null;
-
-		// Extract text based on API provider
-		if (service === "gemini") {
-			// Gemini response format: { candidates: [{ content: { parts: [{ text: "..." }] } }] }
-			// Thinking-enabled models may prepend parts with `thought: true` before the answer part.
-			const candidate = data?.candidates?.[0];
-			const parts = candidate?.content?.parts || [];
-			const answerPart = parts.find((/** @type {any} */ p) => p.text && !p.thought) || parts[0];
-			rawSummary = answerPart?.text || "";
-			finishReason = candidate?.finishReason || null;
-			blockType = answerPart?.thought ? "thought" : null;
-
-			// Check for finish reason
-			if (finishReason === "MAX_TOKENS") {
-				console.warn("Summarize with AI: Summary may be incomplete (max token limit reached)");
-			}
-		} else {
-			// Claude response format (default)
-			// Extended-thinking responses prepend a `thinking` block before the `text` block.
-			const blocks = data?.content || [];
-			const textBlock = blocks.find((/** @type {any} */ b) => b.type === "text") || blocks[0];
-			finishReason = data?.stop_reason || null;
-			blockType = textBlock?.type || null;
-			if (finishReason === "max_tokens") {
-				console.warn("Summarize with AI: Summary may be incomplete (max token limit reached)");
-			}
-			rawSummary = textBlock?.text || "";
+		const provider = PROVIDERS[/** @type {Service} */ (service)];
+		const { rawSummary, finishReason, blockType } = provider.parse(data);
+		if (finishReason === provider.truncatedReason) {
+			console.warn("Summarize with AI: Summary may be incomplete (max token limit reached)");
 		}
 
 		if (!rawSummary && !data?.error) {
@@ -1863,59 +1857,6 @@ Format exactly as shown:
 		});
 
 		updateSummaryOverlay(cleanedSummary, false);
-	}
-
-	/**
-	 * @param {string} prompt
-	 * @param {ModelConfig} modelConfig
-	 * @param {Service} service
-	 * @param {number} [maxTokens]
-	 */
-	function buildRequestBody(
-		prompt,
-		modelConfig,
-		service,
-		maxTokens = CONFIG.limits.defaultMaxTokens,
-	) {
-		if (service === "gemini") {
-			// Gemini API format - REST API requires structured content format
-			return {
-				contents: [
-					{
-						parts: [
-							{
-								text: prompt,
-							},
-						],
-					},
-				],
-			};
-		}
-
-		// Claude API format (default)
-		return {
-			model: modelConfig.id,
-			messages: [{ role: "user", content: prompt }],
-			max_tokens: maxTokens,
-		};
-	}
-
-	/** @param {string} apiKey @param {Service} service @returns {Record<string, string>} */
-	function getHeaders(apiKey, service) {
-		if (service === "gemini") {
-			// Gemini uses API key in URL, not headers
-			return {
-				"Content-Type": "application/json",
-			};
-		}
-
-		// Claude headers (default)
-		return {
-			"Content-Type": "application/json",
-			"x-api-key": apiKey,
-			"anthropic-version": "2023-06-01",
-			"anthropic-dangerous-direct-browser-access": "true",
-		};
 	}
 
 	/** @param {string} service */
@@ -3689,7 +3630,6 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			escapeHtml,
 			formatQAAnswer,
 			cleanSummaryHTML,
-			mergeParams,
 			extractSummaryFromResponse,
 		};
 	}
