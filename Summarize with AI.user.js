@@ -87,14 +87,10 @@
 			},
 		},
 
-		// UI Styles & Colors
+		// UI font stack; colors live as CSS custom properties on .sai-scope
 		styles: {
 			fontFamily:
 				'-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-			colors: {
-				activeModel: "#1A73E8",
-				error: "#d32f2f",
-			},
 		},
 	};
 
@@ -177,10 +173,10 @@
 		},
 		gemini: {
 			idPrefix: "gemini",
-			// The API key goes in the URL, not a header.
+			// The key goes in a header, not the URL, so it stays out of logs and history.
 			request: (apiKey, prompt, modelId) => ({
-				url: `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
-				headers: { "Content-Type": "application/json" },
+				url: `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`,
+				headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
 				body: { contents: [{ parts: [{ text: prompt }] }] },
 			}),
 			parse: data => {
@@ -203,7 +199,8 @@
 				label: "Gemini",
 				fetchId: async apiKey => {
 					const data = await fetchModelsList(
-						`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+						"https://generativelanguage.googleapis.com/v1beta/models",
+						{ "x-goog-api-key": apiKey },
 					);
 					// Exclude flash variants built for a different call shape (live/interactions,
 					// audio, image, tts, managed agents) even though they list generateContent support.
@@ -286,12 +283,12 @@ Format exactly as shown:
 		},
 
 		/** @param {string} defaultModel */
-		async getLastUsedModel(defaultModel) {
+		async loadLastUsedModel(defaultModel) {
 			return await GM.getValue(this.keys.LAST_USED_MODEL, defaultModel);
 		},
 
 		/** @param {string} modelId */
-		async setLastUsedModel(modelId) {
+		async saveLastUsedModel(modelId) {
 			if (!modelId) {
 				console.warn("StorageService: Cannot save empty model ID");
 				return;
@@ -300,7 +297,7 @@ Format exactly as shown:
 		},
 
 		/** @param {string} service */
-		async getApiKey(service) {
+		async loadApiKey(service) {
 			if (!service) {
 				console.error("StorageService: Service parameter is required");
 				return null;
@@ -312,7 +309,7 @@ Format exactly as shown:
 		},
 
 		/** @param {string} service @param {string} apiKey */
-		async setApiKey(service, apiKey) {
+		async saveApiKey(service, apiKey) {
 			if (!service) {
 				throw new Error("StorageService: Service parameter is required");
 			}
@@ -321,14 +318,14 @@ Format exactly as shown:
 		},
 
 		/** @param {string} cacheKey */
-		async getModelCache(cacheKey) {
+		async loadModelCache(cacheKey) {
 			return /** @type {{ modelId: string, timestamp: number } | null} */ (
 				await GM.getValue(cacheKey, null)
 			);
 		},
 
 		/** @param {string} cacheKey @param {string} modelId */
-		async setModelCache(cacheKey, modelId) {
+		async saveModelCache(cacheKey, modelId) {
 			await GM.setValue(cacheKey, { modelId, timestamp: Date.now() });
 		},
 
@@ -345,12 +342,9 @@ Format exactly as shown:
 	 */
 	function showMessage(message) {
 		if (Overlay.isOpen()) {
-			Overlay.update(
-				`<p style="color: ${CONFIG.styles.colors.error};">${escapeHtml(message)}</p>`,
-				{
-					images: state.articleImages,
-				},
-			);
+			Overlay.update(`<p class="sai-error-text">${escapeHtml(message)}</p>`, {
+				images: state.articleImages,
+			});
 		} else {
 			showErrorNotification(message);
 		}
@@ -830,7 +824,7 @@ Format exactly as shown:
 		state.articleData = getArticleData();
 
 		if (state.articleData) {
-			state.activeModel = await StorageService.getLastUsedModel(state.activeModel);
+			state.activeModel = await StorageService.loadLastUsedModel(state.activeModel);
 			ModelMenu.mount();
 			document.addEventListener("keydown", handleKeyPress);
 			injectStyles();
@@ -1105,8 +1099,7 @@ Format exactly as shown:
 			item.dataset.modelId = modelObj.id;
 			item.dataset.service = service;
 			if (modelObj.id === activeModelId()) {
-				item.style.fontWeight = "normal";
-				item.style.color = CONFIG.styles.colors.activeModel;
+				item.classList.add("sai-model-item-active");
 			}
 			return item;
 		}
@@ -1266,7 +1259,7 @@ Format exactly as shown:
 	/** @param {string} modelId */
 	function onSelectModel(modelId) {
 		state.activeModel = modelId;
-		StorageService.setLastUsedModel(modelId);
+		StorageService.saveLastUsedModel(modelId);
 		processSummarization();
 	}
 
@@ -1362,7 +1355,7 @@ Format exactly as shown:
 		currentEntry.name = latest.name;
 		if (state.activeModel.startsWith(activePrefix)) {
 			state.activeModel = latest.id;
-			StorageService.setLastUsedModel(state.activeModel);
+			StorageService.saveLastUsedModel(state.activeModel);
 		}
 		ModelMenu.markStale();
 	}
@@ -1390,7 +1383,7 @@ Format exactly as shown:
 		const modelDisplayName = modelConfig.name || modelConfig.id;
 		const service = modelConfig.service;
 
-		const apiKey = await StorageService.getApiKey(service);
+		const apiKey = await StorageService.loadApiKey(service);
 		if (!apiKey) {
 			showMessage(
 				`${toTitleCase(service)} API key is required. To add one, long-press the S button and select Reset Key.`,
@@ -1528,7 +1521,7 @@ Format exactly as shown:
 		const errorMsg = `Error: ${error.message}`;
 		console.error("Summarize with AI:", errorMsg, error);
 		// The message can carry provider or response-body text, so it's escaped.
-		Overlay.show(`<p style="color: ${CONFIG.styles.colors.error};">${escapeHtml(errorMsg)}</p>`, {
+		Overlay.show(`<p class="sai-error-text">${escapeHtml(errorMsg)}</p>`, {
 			isError: true,
 		});
 		ModelMenu.hideDropdown();
@@ -1620,12 +1613,12 @@ Format exactly as shown:
 	async function resolveLatestModel(service, apiKey) {
 		const { cacheKey, fetchId, name, label } = PROVIDERS[service].latest;
 		try {
-			const cached = await StorageService.getModelCache(cacheKey);
+			const cached = await StorageService.loadModelCache(cacheKey);
 			if (cached && Date.now() - cached.timestamp < MODEL_CACHE_TTL) {
 				return { id: cached.modelId, name };
 			}
 			const modelId = await fetchId(apiKey);
-			await StorageService.setModelCache(cacheKey, modelId);
+			await StorageService.saveModelCache(cacheKey, modelId);
 			return { id: modelId, name };
 		} catch (/** @type {any} */ err) {
 			console.warn(
@@ -1837,9 +1830,7 @@ Format exactly as shown:
 			]
 				.filter(Boolean)
 				.join(", ");
-			throw new Error(
-				`API response did not contain a valid summary (${diagnostics || "no diagnostic info in response"}).`,
-			);
+			throw new Error(`API response did not contain a valid summary (${diagnostics}).`);
 		}
 
 		return { rawSummary, finishReason, blockType };
@@ -1876,7 +1867,7 @@ Format exactly as shown:
 
 		if (newApiKey !== null) {
 			const trimmedApiKey = newApiKey.trim();
-			await StorageService.setApiKey(service, newApiKey);
+			await StorageService.saveApiKey(service, newApiKey);
 			const message = trimmedApiKey
 				? `${toTitleCase(service)} API key updated successfully.`
 				: `${toTitleCase(service)} API key has been cleared.`;
@@ -2038,9 +2029,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			answerBox.clearQuestion();
 		} catch (/** @type {any} */ error) {
 			console.error("Ask question failed:", error);
-			answerBox.showAnswer(
-				`<p style="color: ${CONFIG.styles.colors.error};">Error: ${escapeHtml(error.message)}</p>`,
-			);
+			answerBox.showAnswer(`<p class="sai-error-text">Error: ${escapeHtml(error.message)}</p>`);
 		} finally {
 			answerBox.setBusy(false);
 		}
@@ -2541,7 +2530,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
            can't bleed into the injected UI. Not "all: initial" - that would also
            reset non-inherited layout properties (display, position, margin) that
            this file's own more-specific rules for each container rely on. */
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-family: ${fontFamily};
         font-size: 16px;
         font-weight: 400;
         font-style: normal;
@@ -2554,7 +2543,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         /* Color Palette */
         --color-text-primary: #1a1a1a;
         --color-text-secondary: #666;
-        --color-text-tertiary: #999;
+        --color-text-tertiary: #6e6e6e;
         --color-border: #e0e0e0;
         --color-border-light: #f0f0f0;
         --color-bg-primary: #ffffff;
@@ -2620,7 +2609,9 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         .sai-scope {
           --color-text-primary: #e8e8e8;
           --color-text-secondary: #999;
-          --color-text-tertiary: #777;
+          --color-text-tertiary: #949494;
+          --color-error: #f28b82;
+          --color-accent: #8ab4f8;
           --color-border: #333;
           --color-border-light: #2a2a2a;
           --color-bg-primary: #1a1a1a;
@@ -3433,6 +3424,13 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
         background-color: var(--color-bg-hover);
         color: var(--color-text-primary);
         transform: translateX(2px);
+      }
+      .sai-model-item.sai-model-item-active,
+      .sai-model-item.sai-model-item-active:hover {
+        color: var(--color-accent);
+      }
+      .sai-error-text {
+        color: var(--color-error);
       }
 
       /* =================================================================

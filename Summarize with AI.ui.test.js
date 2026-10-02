@@ -30,7 +30,7 @@ const defaultResponder = req => {
 	if (req.url.endsWith("/v1/models")) {
 		return { response: { data: [{ id: "claude-sonnet-4-6" }, { id: "claude-sonnet-5-0" }] } };
 	}
-	if (req.url.includes("/v1beta/models?key=")) {
+	if (req.url.endsWith("/v1beta/models")) {
 		return { response: { models: [] } };
 	}
 	if (req.url.includes(":generateContent")) {
@@ -210,7 +210,9 @@ describe("page load", () => {
 		expect(page.byId("sai-summarize-button").textContent).toBe("S");
 		expect(page.byId("sai-model-dropdown").style.display).toBe("none");
 		expect(page.styles).toHaveLength(1);
-		expect(page.$('meta[name="viewport"]')).not.toBeNull();
+		expect(page.$('meta[name="viewport"]')?.getAttribute("content")).toBe(
+			"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no",
+		);
 	});
 
 	it("stays out of the way on a page with no article", async () => {
@@ -265,7 +267,7 @@ describe("summarizing with Claude", () => {
 
 		const summary = page.$(".sai-summary-content-body").innerHTML;
 		expect(summary).toBe("<p>Core <span>point</span></p><a>bad</a>");
-		expect(page.byId("sai-summarize-question-input")).not.toBeNull();
+		expect(page.byId("sai-summarize-question-input")?.tagName).toBe("INPUT");
 		expect(page.byId("sai-summarize-button").style.display).toBe("none");
 	});
 
@@ -297,7 +299,7 @@ describe("summarizing with Claude", () => {
 		await settle();
 
 		const content = page.byId("sai-summarize-content");
-		expect(content.textContent).toContain(
+		expect(page.$(".sai-error-text")?.textContent).toBe(
 			"Error: [claude-sonnet-4-6] API Error (400): invalid x-api-key",
 		);
 		page.respondWith(defaultResponder);
@@ -307,9 +309,9 @@ describe("summarizing with Claude", () => {
 	});
 
 	it.each([
-		["error", "Network error: Failed to connect"],
-		["timeout", "Request timed out after 60 seconds"],
-		["abort", "Request aborted"],
+		["error", "Error: [claude-sonnet-4-6] Network error: Failed to connect"],
+		["timeout", "Error: [claude-sonnet-4-6] Request timed out after 60 seconds"],
+		["abort", "Error: [claude-sonnet-4-6] Request aborted"],
 	])("reports a %s from the request", async (fail, message) => {
 		const page = await loadPage({
 			storage: {
@@ -322,7 +324,7 @@ describe("summarizing with Claude", () => {
 		page.byId("sai-summarize-button").click();
 		await settle();
 
-		expect(page.byId("sai-summarize-content").textContent).toContain(message);
+		expect(page.$(".sai-error-text")?.textContent).toBe(message);
 	});
 
 	it("explains an empty response instead of showing nothing", async () => {
@@ -336,8 +338,8 @@ describe("summarizing with Claude", () => {
 		page.byId("sai-summarize-button").click();
 		await settle();
 
-		expect(page.byId("sai-summarize-content").textContent).toContain(
-			"did not contain a valid summary (stop reason: max_tokens, status: 200)",
+		expect(page.$(".sai-error-text")?.textContent).toBe(
+			"Error: [claude-sonnet-5-0] API response did not contain a valid summary (stop reason: max_tokens, status: 200).",
 		);
 	});
 
@@ -401,10 +403,10 @@ describe("summarizing with Claude", () => {
 });
 
 describe("summarizing with Gemini", () => {
-	it("is chosen from the model menu and sends the key in the URL", async () => {
+	it("is chosen from the model menu and sends the key in a header, not the URL", async () => {
 		const page = await loadPage({ storage: { gemini_api_key: " g-key " } });
 		page.respondWith(req =>
-			req.url.includes("?key=") && req.method === "GET"
+			req.url.endsWith("/v1beta/models") && req.method === "GET"
 				? {
 						response: {
 							models: [
@@ -439,9 +441,16 @@ describe("summarizing with Gemini", () => {
 		page.$('[data-model-id="gemini-3.5-flash"]').click();
 		await settle();
 
+		const [listing] = page.requests.filter(r => r.method === "GET");
+		expect(listing.url).toBe("https://generativelanguage.googleapis.com/v1beta/models");
+		expect(listing.headers).toEqual({ "x-goog-api-key": "g-key" });
 		expect(posts(page)[0].url).toBe(
-			"https://generativelanguage.googleapis.com/v1beta/models/gemini-4.0-flash:generateContent?key=g-key",
+			"https://generativelanguage.googleapis.com/v1beta/models/gemini-4.0-flash:generateContent",
 		);
+		expect(posts(page)[0].headers).toEqual({
+			"Content-Type": "application/json",
+			"x-goog-api-key": "g-key",
+		});
 		expect(page.storage.get("last_used_model")).toBe("gemini-4.0-flash");
 		expect(page.$(".sai-summary-content-body").textContent).toBe("Flash says");
 	});
@@ -498,9 +507,11 @@ describe("asking a question", () => {
 		const lastPost = JSON.parse(/** @type {string} */ (posts(page).at(-1)?.data));
 		expect(lastPost.max_tokens).toBe(800);
 		expect(lastPost.messages[0].content).toContain("Question: Why <now>?");
-		const answer = page.$(".sai-answer").innerHTML;
-		expect(answer).toContain("<strong>Q:</strong> Why &lt;now&gt;?");
-		expect(answer).toContain("<ul>\n<li>First</li>\n<li>Second</li>\n</ul>");
+		expect(page.$(".sai-answer > p")?.innerHTML).toBe("<strong>Q:</strong> Why &lt;now&gt;?");
+		expect(page.$(".sai-answer-content")?.innerHTML).toBe(
+			"<p>Rates went up.</p>\n<ul>\n<li>First</li>\n<li>Second</li>\n</ul>",
+		);
+
 		expect(page.byId("sai-summarize-question-input").value).toBe("");
 		expect(page.byId("sai-summarize-ask-button").textContent).toBe("Ask");
 	});
@@ -516,7 +527,7 @@ describe("asking a question", () => {
 
 		page.respondWith(() => ({ status: 429, response: { message: "rate limited" } }));
 		await ask(page, "What next?");
-		expect(page.byId("sai-answer-container").textContent).toContain(
+		expect(page.$("#sai-answer-container .sai-error-text")?.textContent).toBe(
 			"Error: [claude-sonnet-5-0] API Error (429): rate limited",
 		);
 	});
@@ -569,7 +580,7 @@ describe("keyboard and pointer shortcuts", () => {
 
 		fire(page.window, page.document, "keydown", { code: "KeyS", key: "s", altKey: true });
 		await settle();
-		expect(page.byId("sai-summarize-overlay")).not.toBeNull();
+		expect(page.$(".sai-summary-content-body")?.innerHTML).toBe("<p>Summary text.</p>");
 
 		fire(page.window, page.document, "keydown", { key: "Escape" });
 		expect(page.byId("sai-summarize-overlay")).toBeNull();
@@ -697,7 +708,7 @@ describe("image gallery and lightbox", () => {
 		fire(page.window, page.document, "keydown", { key: "Escape" });
 		expect(page.$(".sai-lightbox-overlay")).toBeNull();
 		// Escape closes only the lightbox; the summary it was opened from stays.
-		expect(page.byId("sai-summarize-overlay")).not.toBeNull();
+		expect(page.byId("sai-summarize-overlay")?.isConnected).toBe(true);
 	});
 
 	it("zooms and pans with wheel, drag, double-click, pinch and double-tap", async () => {
@@ -889,7 +900,9 @@ describe("less common API responses", () => {
 		await settle();
 
 		const content = page.byId("sai-summarize-content");
-		expect(content.textContent).toContain('<img src=x onerror="boom()">');
+		expect(page.$(".sai-error-text")?.textContent).toBe(
+			'Error: [claude-sonnet-5-0] API Error (400): <img src=x onerror="boom()">',
+		);
 		expect(content.querySelector("img")).toBeNull();
 	});
 
@@ -902,7 +915,9 @@ describe("less common API responses", () => {
 		page.byId("sai-summarize-button").click();
 		await settle();
 
-		expect(page.byId("sai-summarize-content").textContent).toContain("JSON");
+		expect(page.$(".sai-error-text")?.textContent).toBe(
+			"Error: [claude-sonnet-5-0] Unexpected token '<', \"<html>Bad gateway\" is not valid JSON",
+		);
 	});
 
 	it("keeps the default model when model discovery fails or finds nothing", async () => {
@@ -919,7 +934,33 @@ describe("less common API responses", () => {
 		});
 		gemini.byId("sai-summarize-button").click();
 		await settle();
-		expect(posts(gemini)[0].url).toContain("/gemini-3.5-flash:generateContent");
+		expect(posts(gemini)[0].url).toBe(
+			"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+		);
+	});
+
+	it("keeps the default model when discovery lists no usable model", async () => {
+		const claude = await loadPage({ storage: KEYED });
+		claude.respondWith(req => (req.method === "GET" ? { response: {} } : defaultResponder(req)));
+		claude.byId("sai-summarize-button").click();
+		await settle();
+		expect(JSON.parse(/** @type {string} */ (posts(claude)[0].data)).model).toBe(
+			"claude-sonnet-4-6",
+		);
+
+		for (const listing of [{}, { models: [{ name: "models/gemini-9-flash" }] }]) {
+			const gemini = await loadPage({
+				storage: { gemini_api_key: "g", last_used_model: "gemini-3.5-flash" },
+			});
+			gemini.respondWith(req =>
+				req.method === "GET" ? { response: listing } : defaultResponder(req),
+			);
+			gemini.byId("sai-summarize-button").click();
+			await settle();
+			expect(posts(gemini)[0].url).toBe(
+				"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+			);
+		}
 	});
 
 	it("names the block type, or falls back to a generic message, when there is no text", async () => {
@@ -931,15 +972,15 @@ describe("less common API responses", () => {
 		);
 		page.byId("sai-summarize-button").click();
 		await settle();
-		expect(page.byId("sai-summarize-content").textContent).toContain(
-			"(block type: thinking, status: 200)",
+		expect(page.$(".sai-error-text")?.textContent).toBe(
+			"Error: [claude-sonnet-5-0] API response did not contain a valid summary (block type: thinking, status: 200).",
 		);
 
 		page.respondWith(() => ({ status: 502, response: {} }));
 		page.byId("sai-summarize-retry-button").click();
 		await settle();
-		expect(page.byId("sai-summarize-content").textContent).toContain(
-			"API Error (502): Unknown API error",
+		expect(page.$(".sai-error-text")?.textContent).toBe(
+			"Error: [claude-sonnet-5-0] API Error (502): Unknown API error",
 		);
 	});
 
@@ -954,7 +995,9 @@ describe("less common API responses", () => {
 		page.byId("sai-summarize-ask-button").click();
 		await settle();
 
-		expect(page.$(".sai-summary-content-body").textContent).toContain("Claude API key is required");
+		expect(page.$(".sai-error-text")?.textContent).toBe(
+			"Claude API key is required. To add one, long-press the S button and select Reset Key.",
+		);
 	});
 });
 
@@ -1069,14 +1112,16 @@ describe("edge cases found while testing", () => {
 		page.respondWith(req => (req.method === "GET" ? defaultResponder(req) : { response: "" }));
 		page.byId("sai-summarize-button").click();
 		await settle();
-		expect(page.byId("sai-summarize-content").textContent).toContain(
-			"did not contain a valid summary (status: 200)",
+		expect(page.$(".sai-error-text")?.textContent).toBe(
+			"Error: [claude-sonnet-5-0] API response did not contain a valid summary (status: 200).",
 		);
 
 		page.respondWith(() => ({ fail: "error", statusText: "Bad Gateway" }));
 		page.byId("sai-summarize-retry-button").click();
 		await settle();
-		expect(page.byId("sai-summarize-content").textContent).toContain("Network error: Bad Gateway");
+		expect(page.$(".sai-error-text")?.textContent).toBe(
+			"Error: [claude-sonnet-5-0] Network error: Bad Gateway",
+		);
 	});
 
 	it("keeps a bracketed header in its own paragraph", async () => {

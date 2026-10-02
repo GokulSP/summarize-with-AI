@@ -27,12 +27,5 @@
 		"lefthook": "^2.1.14",
 		"typescript": "^7.0.2",
 		"vitest": "^5.0.1"
-	},
-	"scripts": {
-		"prepare": "lefthook install",
-		"lint": "task lint:js",
-		"format": "task lint:js",
-		"typecheck": "task typecheck:js",
-		"test": "task test:js"
 	}
 }

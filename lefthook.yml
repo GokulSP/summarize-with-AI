@@ -1,7 +1,7 @@
 pre-commit:
   commands:
     lint-js:
-      glob: "*.{js,json}"
+      glob: "*.{js,svelte,json,css,html}"
       run: task lint:js -- {staged_files}
       stage_fixed: true
     lint-md:

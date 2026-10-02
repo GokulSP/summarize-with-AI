@@ -29,12 +29,15 @@ Desktop.ini
 
 # Environment and secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.key
 *.pem
 credentials.json
 
 # Git stuff
 *.orig
-*.rejcoverage/
+*.rej
+
+# Test coverage output
+coverage/

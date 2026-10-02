@@ -1,22 +1,37 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 const SCRIPT_FILE = "Summarize with AI.user.js";
 const META_JS = "Summarize with AI.meta.js";
 const PACKAGE_JSON = "package.json";
 
-/** @typedef {{ type: 'tag', tag: string, value: string } | { type: 'boundary' | 'comment' | 'empty' | 'other', line: string }} MetaLine */
-
-/** @type {(l: MetaLine) => l is Extract<MetaLine, { type: 'tag' }>} */
-const isTagLine = l => l.type === "tag";
-
 const META_OPEN = "// ==UserScript==";
 const META_CLOSE = "// ==/UserScript==";
 
 /**
+ * The file and git operations syncMetadata performs; paths are relative to the repo root.
+ * @typedef {{
+ *   readText: (path: string) => string,
+ *   writeText: (path: string, text: string) => void,
+ *   stage: (path: string) => void,
+ *   log: (message: string) => void,
+ * }} SyncIo
+ */
+
+/** @type {SyncIo} */
+const nodeIo = {
+	readText: path => readFileSync(path, "utf-8"),
+	writeText: (path, text) => writeFileSync(path, text, "utf-8"),
+	stage: path => execFileSync("git", ["add", path], { stdio: "pipe" }),
+	log: message => console.log(message),
+};
+
+/**
  * The userscript's text split around its metadata block (markers included).
  * @param {string} content
+ * @throws {Error} when either metadata marker is missing
  */
 function splitMetadata(content) {
 	const start = content.indexOf(META_OPEN);
@@ -30,90 +45,71 @@ function splitMetadata(content) {
 	};
 }
 
-function formatUserscriptMetadata() {
-	console.log("Formatting userscript metadata...");
-
-	const {
-		before: beforeMeta,
-		metadata,
-		after: afterMeta,
-	} = splitMetadata(readFileSync(SCRIPT_FILE, "utf-8"));
-
-	const lines = metadata.split("\n");
-	/** @type {MetaLine[]} */
-	const metaLines = [];
-
-	for (const line of lines) {
-		const trimmed = line.trim();
-		if (trimmed === META_OPEN || trimmed === META_CLOSE) {
-			metaLines.push({ type: "boundary", line: trimmed });
-		} else if (trimmed.startsWith("// @")) {
-			const match = trimmed.match(/^\/\/\s*(@\S+)\s+(.*)$/);
-			if (match) {
-				metaLines.push({ type: "tag", tag: match[1], value: match[2] });
-			} else {
-				metaLines.push({ type: "other", line: trimmed });
-			}
-		} else if (trimmed.startsWith("//")) {
-			metaLines.push({ type: "comment", line: trimmed });
-		} else if (trimmed === "") {
-			metaLines.push({ type: "empty", line: "" });
-		}
-	}
-
-	const tagLines = metaLines.filter(isTagLine);
-	const maxTagLength = Math.max(...tagLines.map(l => l.tag.length));
-
-	const formattedLines = metaLines.map(item => {
-		if (item.type === "tag") {
-			const padding = " ".repeat(maxTagLength - item.tag.length);
-			return `// ${item.tag}${padding} ${item.value}`;
-		}
-		return item.line;
-	});
-
-	const formattedMetadata = formattedLines.join("\n");
-
-	if (formattedMetadata !== metadata) {
-		writeFileSync(SCRIPT_FILE, beforeMeta + formattedMetadata + afterMeta, "utf-8");
-		execFileSync("git", ["add", SCRIPT_FILE], { stdio: "pipe" });
-		console.log("✓ Metadata formatted and aligned");
-	} else {
-		console.log("  Metadata already aligned");
-	}
+/**
+ * The metadata block with every `// @tag value` line's value aligned to one column.
+ * Blank lines and plain comments are kept; other lines are trimmed.
+ * @param {string} metadata
+ */
+export function alignMetadata(metadata) {
+	const lines = metadata.split("\n").map(line => line.trim());
+	const tags = lines.map(line => line.match(/^\/\/\s*(@\S+)\s+(.*)$/));
+	const width = Math.max(0, ...tags.map(tag => (tag ? tag[1].length : 0)));
+	return lines
+		.map((line, i) => {
+			const tag = tags[i];
+			return tag ? `// ${tag[1].padEnd(width)} ${tag[2]}` : line;
+		})
+		.join("\n");
 }
 
-function syncMetadata() {
-	console.log(`Syncing metadata to ${META_JS}...`);
+/**
+ * Aligns the userscript's metadata block, mirrors it into the .meta.js update-check file
+ * and copies its @version into package.json, staging every file it rewrites.
+ * @param {SyncIo} io
+ * @returns {string | undefined} the synced @version, or undefined when the header has none
+ * @throws {Error} when the userscript has no metadata block
+ */
+export function syncMetadata(io = nodeIo) {
+	const { before, metadata, after } = splitMetadata(io.readText(SCRIPT_FILE));
+	const aligned = alignMetadata(metadata);
+	if (aligned !== metadata) {
+		io.writeText(SCRIPT_FILE, before + aligned + after);
+		io.stage(SCRIPT_FILE);
+		io.log("Metadata formatted and aligned");
+	}
 
-	const { metadata } = splitMetadata(readFileSync(SCRIPT_FILE, "utf-8"));
-	writeFileSync(META_JS, `${metadata}\n`, "utf-8");
+	io.writeText(META_JS, `${aligned}\n`);
+	io.stage(META_JS);
+	const version = aligned.match(/@version\s+(.+)/)?.[1]?.trim();
+	io.log(`Metadata synced to ${META_JS} (v${version ?? "unknown"})`);
+	if (!version) return undefined;
 
-	const version = metadata.match(/@version\s+(.+)/)?.[1]?.trim();
-	console.log(`✓ Metadata synced to ${META_JS} (v${version ?? "unknown"})`);
-
-	execFileSync("git", ["add", META_JS], { stdio: "pipe" });
+	const pkg = JSON.parse(io.readText(PACKAGE_JSON));
+	if (pkg.version !== version) {
+		pkg.version = version;
+		io.writeText(PACKAGE_JSON, `${JSON.stringify(pkg, null, "\t")}\n`);
+		io.stage(PACKAGE_JSON);
+		io.log(`package.json version synced to ${version}`);
+	}
 	return version;
 }
 
-/** @param {string | undefined} version */
-function syncPackageVersion(version) {
-	if (!version) return;
-
-	const pkg = JSON.parse(readFileSync(PACKAGE_JSON, "utf-8"));
-	if (pkg.version === version) return;
-
-	pkg.version = version;
-	writeFileSync(PACKAGE_JSON, `${JSON.stringify(pkg, null, "\t")}\n`, "utf-8");
-	execFileSync("git", ["add", PACKAGE_JSON], { stdio: "pipe" });
-	console.log(`✓ package.json version synced to ${version}`);
+/**
+ * Command-line entry: runs syncMetadata and reports a failure instead of throwing.
+ * @param {SyncIo} io
+ * @param {(message: string) => void} logError
+ * @returns {0 | 1} the process exit code
+ */
+export function main(io = nodeIo, logError = console.error) {
+	try {
+		syncMetadata(io);
+		return 0;
+	} catch (error) {
+		logError(`Error: ${error instanceof Error ? error.message : String(error)}`);
+		return 1;
+	}
 }
 
-try {
-	formatUserscriptMetadata();
-	const version = syncMetadata();
-	syncPackageVersion(version);
-} catch (error) {
-	console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-	process.exit(1);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+	process.exitCode = main();
 }

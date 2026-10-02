@@ -101,6 +101,31 @@ describe("formatQAAnswer", () => {
 			"<p><strong>Summary:</strong></p>\n<p>Details here.</p>",
 		);
 	});
+
+	it.each([
+		["a blank line", "1. One\n\nAfter", "<p>After</p>"],
+		["a section header", "1. One\n**Next:**\n\nText", "<p><strong>Next:</strong></p>\n<p>Text</p>"],
+		["a line starting in bold", "1. One\n**Bold** start", "<strong>Bold</strong> start"],
+		["a plain paragraph", "1. One\nPlain", "<p>Plain</p>"],
+	])("closes an open list at %s", (_, input, rest) => {
+		expect(helpers.formatQAAnswer(input)).toBe(`<ul>\n<li>One</li>\n</ul>\n${rest}`);
+	});
+
+	it("opens a list straight after a section header", () => {
+		expect(helpers.formatQAAnswer("**Key:**\n1. Item")).toBe(
+			"<p><strong>Key:</strong></p>\n<ul>\n<li>Item</li>\n</ul>",
+		);
+	});
+
+	it("moves an inline bold label onto its own line", () => {
+		expect(helpers.formatQAAnswer("Intro. **Key:** rest")).toBe(
+			"<p>Intro.</p>\n<strong>Key:</strong> rest",
+		);
+	});
+
+	it("escapes HTML in the model's answer", () => {
+		expect(helpers.formatQAAnswer("Tom & <Jerry>")).toBe("<p>Tom &amp; &lt;Jerry&gt;</p>");
+	});
 });
 
 describe("extractSummaryFromResponse", () => {
@@ -137,6 +162,25 @@ describe("extractSummaryFromResponse", () => {
 			},
 		});
 		expect(result).toEqual({ rawSummary: "Real answer", finishReason: "STOP", blockType: null });
+	});
+
+	it("falls back to a Gemini thought part when it is the only text", () => {
+		const result = helpers.extractSummaryFromResponse({
+			status: 200,
+			service: "gemini",
+			data: { candidates: [{ content: { parts: [{ text: "only thoughts", thought: true }] } }] },
+		});
+		expect(result).toEqual({
+			rawSummary: "only thoughts",
+			finishReason: null,
+			blockType: "thought",
+		});
+	});
+
+	it("reports an empty Gemini response by its status", () => {
+		expect(() =>
+			helpers.extractSummaryFromResponse({ status: 200, service: "gemini", data: {} }),
+		).toThrow("API response did not contain a valid summary (status: 200).");
 	});
 
 	it("throws with status and error detail on a non-2xx response", () => {

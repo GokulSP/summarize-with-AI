@@ -27,9 +27,9 @@ tasks:
   test:js:
     cmds:
       - >-
-        pnpm exec vitest run --coverage --coverage.include="*.user.js"
+        pnpm exec vitest run --coverage --coverage.include="*.user.js" --coverage.include="scripts/*.js"
         --coverage.reporter=text --coverage.thresholds.lines=80
-        --coverage.thresholds.branches=76
+        --coverage.thresholds.branches=80
 
   audit:
     deps: [audit:js]
@@ -67,7 +67,7 @@ tasks:
     cmds:
       - pnpm update --latest
       - pnpm exec knip
-      - uv cache clean rumdl gitfluff semgrep
+      - uv cache clean rumdl gitfluff
       - uv self update
       - cmd: winget upgrade --all
         ignore_error: true

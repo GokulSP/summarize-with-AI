@@ -29,9 +29,10 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version-file: '.nvmrc'
+          # v6.3.0+ reads devEngines.runtime, so package.json is the one Node pin
+          node-version-file: 'package.json'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -49,10 +50,14 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
+      # Publish tracked files only, so node_modules never reaches Pages
+      - name: Stage site
+        run: mkdir _site && git ls-files -z | xargs -0 cp --parents -t _site
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
 
       - name: Deploy to GitHub Pages
         id: deployment
