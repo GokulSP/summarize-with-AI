@@ -569,16 +569,13 @@ Format exactly as shown:
 		summaryCache: new Map(), // Cache summaries by model: modelId -> { articleData, images, summary }
 	};
 
-	/** @type {{ button: HTMLElement | null, dropdown: HTMLElement | null, overlay: HTMLElement | null, overlayElements: OverlayElements | null, overlayCleanup: (() => void) | null, lightbox: HTMLElement | null, lightboxElements: LightboxElements | null, lightboxCleanup: (() => void) | null }} */
+	/** @type {{ button: HTMLElement | null, dropdown: HTMLElement | null, overlay: HTMLElement | null, overlayElements: OverlayElements | null, overlayCleanup: (() => void) | null }} */
 	const dom = {
 		button: null,
 		dropdown: null,
 		overlay: null,
 		overlayElements: null,
 		overlayCleanup: null,
-		lightbox: null,
-		lightboxElements: null, // Cache lightbox child elements
-		lightboxCleanup: null, // Store cleanup function for lightbox listeners
 	};
 
 	/** @param {() => void} onLongPress @param {number} [duration] */
@@ -749,7 +746,7 @@ Format exactly as shown:
 				const galleryItem = /** @type {HTMLElement} */ (e.target)?.closest(".sai-gallery-item");
 				if (galleryItem instanceof HTMLElement && galleryItem.dataset.imageIndex) {
 					const index = parseInt(galleryItem.dataset.imageIndex, 10);
-					openLightbox(index);
+					Lightbox.open(state.articleImages, index);
 				}
 			},
 		};
@@ -831,20 +828,77 @@ Format exactly as shown:
 	}
 
 	// Pre-compiled regex patterns (compile once at module level)
-	const IMAGE_EXTRACTION_REGEX = {
-		economistWidth: /width=(\d+)/,
-	};
-
-	// Pre-calculated constants
 	const IMAGE_ASPECT_RATIO = 0.5625; // 9/16
+	const ECONOMIST_WIDTH_PARAM = /cdn-cgi\/image\/width=(\d+)/;
+	const HBR_EXCLUDED_PREFIXES = [
+		"https://cdn11.bigcommerce.com/",
+		"https://hbr.org/resources/images/article_assets/2015/12/HBR-Ideacast-HP-feed.png",
+		"https://hbr.org/resources/images/article_assets/2019/03/wide-cold-call.png",
+		"https://hbr.org/resources/images/podcasts/episode-ideacast.png",
+		"https://hbr.org/resources/images/podcasts/episode-cold-call.png",
+		"https://hbr.org/resources/images/products/generic-tool.png",
+		"https://hbr.org/resources/images/article_assets/2023/05/wide-hbr-on-leadership.png",
+		"https://hbr.org/resources/images/article_assets/2019/04/WomenAtWork-Wide_WP_1200.png",
+	];
+
+	/**
+	 * Per-site tweaks to the generic article-image filter, keyed by a hostname fragment.
+	 * Every rule is optional; a site with none uses the generic filter unchanged.
+	 * @typedef {{ width: number, height: number }} ImageSize
+	 * @typedef {Object} SiteImageRules
+	 * @property {(img: HTMLImageElement, src: string) => boolean} [exclude] promo, teaser or
+	 *   headshot images to drop outright
+	 * @property {(src: string) => (ImageSize & { isChart: boolean }) | null} [sizeFromUrl] the
+	 *   rendered size encoded in the URL, when naturalWidth/Height can't be trusted
+	 * @property {(src: string, isChart: boolean) => boolean} [keepWhenSmall] charts worth
+	 *   keeping below the generic 300px minimum
+	 * @property {(size: ImageSize) => boolean} [excludeSize] known ad/promo dimensions
+	 * @property {boolean} [firstLargeImageOnly] keep only the first image of 1280x720 or more
+	 *   (the rest are repeats of the hero image)
+	 */
+
+	/** @type {Record<string, SiteImageRules>} */
+	const SITE_IMAGE_RULES = {
+		"hbr.org": {
+			exclude: (_img, src) => HBR_EXCLUDED_PREFIXES.some(prefix => src.startsWith(prefix)),
+			excludeSize: ({ width, height }) =>
+				(width === 500 && height >= 700 && height <= 800) || (width === 383 && height === 215),
+		},
+		"economist.com": {
+			exclude: (img, src) =>
+				img.closest('[class*="e1kb1ha80"]') !== null ||
+				src.includes("_DE_") ||
+				// "More from"/related-article teaser cards use CSS-module classes like
+				// teaser_mb-teaser__k_8Tk -- the hashed suffix changes per deploy, but the
+				// mb-teaser token is stable.
+				img.closest('[class*="mb-teaser"]') !== null,
+			sizeFromUrl: src => {
+				const match = ECONOMIST_WIDTH_PARAM.exec(src);
+				if (!match) return null;
+				const width = parseInt(match[1], 10);
+				// WBC = Weekly Business Chart; content-assets/images also holds charts.
+				const isChart = src.includes("WBC") || src.includes("content-assets/images");
+				return { width, height: Math.round(width * IMAGE_ASPECT_RATIO), isChart };
+			},
+			// Economist charts are often only 360px wide.
+			keepWhenSmall: (_src, isChart) => isChart,
+			firstLargeImageOnly: true,
+		},
+		"mckinsey.com": {
+			exclude: (_img, src) =>
+				src.includes("/our%20people/") || src.includes("-thumb") || src.includes("headshot"),
+			// Exhibit charts are vector SVGs (often gzipped .svgz) with no intrinsic raster
+			// size, so naturalWidth/naturalHeight report 0.
+			keepWhenSmall: src => src.includes(".svgz") || src.includes(".svg"),
+		},
+	};
 
 	async function extractArticleImages() {
 		try {
-			// Site-specific detection (cached once)
 			const hostname = window.location.hostname;
-			const isHBR = hostname.includes("hbr.org");
-			const isEconomist = hostname.includes("economist.com");
-			const isMcKinsey = hostname.includes("mckinsey.com");
+			/** @type {SiteImageRules} */
+			const rules =
+				Object.entries(SITE_IMAGE_RULES).find(([host]) => hostname.includes(host))?.[1] ?? {};
 
 			// Optimized lazy loading: Use Intersection Observer API instead of forced scrolling
 			// This is non-blocking and much more performant
@@ -895,20 +949,7 @@ Format exactly as shown:
 			/** @type {Set<string>} */
 			const seen = new Set();
 
-			// Track first large image for Economist
-			let hasEconomistLargeImage = false;
-
-			// HBR.org URL exclusion - Use array for iteration, Set for checking
-			const hbrExcludedUrls = [
-				"https://hbr.org/resources/images/article_assets/2015/12/HBR-Ideacast-HP-feed.png",
-				"https://hbr.org/resources/images/article_assets/2019/03/wide-cold-call.png",
-				"https://hbr.org/resources/images/podcasts/episode-ideacast.png",
-				"https://hbr.org/resources/images/podcasts/episode-cold-call.png",
-				"https://hbr.org/resources/images/products/generic-tool.png",
-				"https://hbr.org/resources/images/article_assets/2023/05/wide-hbr-on-leadership.png",
-				"https://hbr.org/resources/images/article_assets/2019/04/WomenAtWork-Wide_WP_1200.png",
-			];
-			const hbrExcludedPrefix = "https://cdn11.bigcommerce.com/";
+			let hasLargeImage = false;
 
 			// Visualization domains for fast checking
 			const vizDomains = ["flo.uri.sh", "flourish", "datawrapper.dwcdn.net"];
@@ -962,77 +1003,18 @@ Format exactly as shown:
 					const src = img.currentSrc || img.src || img.dataset.src || img.dataset.lazySrc;
 					if (!src || seen.has(src) || src.startsWith("data:")) continue;
 
-					// Combine Economist filters in single check
-					if (isEconomist) {
-						const hasPromotionalClass = img.closest('[class*="e1kb1ha80"]') !== null;
-						const isHeaderImage = src.includes("_DE_");
-						// "More from"/related-article teaser cards use CSS-module classes like
-						// teaser_mb-teaser__k_8Tk and media_mb-teaser__media__JtjA2 — the hashed
-						// suffix changes per Economist deploy, but the mb-teaser token is stable.
-						const isTeaserImage = img.closest('[class*="mb-teaser"]') !== null;
+					if (rules.exclude?.(img, src)) continue;
 
-						if (hasPromotionalClass || isHeaderImage || isTeaserImage) {
-							continue;
-						}
-					}
+					const fromUrl = rules.sizeFromUrl?.(src) ?? null;
+					const width = fromUrl ? fromUrl.width : img.naturalWidth;
+					const height = fromUrl ? fromUrl.height : img.naturalHeight;
+					const isChart = fromUrl?.isChart ?? false;
 
-					// Early URL filtering - optimized HBR check
-					if (isHBR) {
-						if (src.startsWith(hbrExcludedPrefix)) continue;
-						// Optimize: use some() instead of manual loop
-						if (hbrExcludedUrls.some(url => src.startsWith(url))) continue;
-					}
-
-					// McKinsey: exclude staff headshots and thumbnail crops
-					if (isMcKinsey) {
-						if (
-							src.includes("/our%20people/") ||
-							src.includes("-thumb") ||
-							src.includes("headshot")
-						)
-							continue;
-					}
-
-					// Extract dimensions
-					let width = img.naturalWidth;
-					let height = img.naturalHeight;
-					let isEconomistChart = false;
-
-					// Extract width from URL parameters
-					if (isEconomist && src.includes("cdn-cgi/image/width=")) {
-						const match = IMAGE_EXTRACTION_REGEX.economistWidth.exec(src);
-						if (match) {
-							width = parseInt(match[1], 10);
-							height = Math.round(width * IMAGE_ASPECT_RATIO);
-
-							// Detect Economist charts (WBC = Weekly Business Chart, or content-assets/images path)
-							isEconomistChart = src.includes("WBC") || src.includes("content-assets/images");
-						}
-					}
-
-					// McKinsey exhibit charts are vector SVGs (often gzipped .svgz) with no
-					// intrinsic raster size, so naturalWidth/naturalHeight report 0
-					const isMcKinseySvgChart = isMcKinsey && (src.includes(".svgz") || src.includes(".svg"));
-
-					// Combined size filters (with exemptions for Economist/McKinsey charts)
-					if (width < 300 || height < 300) {
-						// Allow Economist charts even if small (they're often 360px wide)
-						if ((isEconomist && isEconomistChart) || isMcKinseySvgChart) {
-							// Chart exemption - continue to add the image
-						} else {
-							continue;
-						}
-					}
-					if (
-						isHBR &&
-						((width === 500 && height >= 700 && height <= 800) || (width === 383 && height === 215))
-					)
-						continue;
-
-					// Economist large image filter
-					if (isEconomist && width >= 1280 && height >= 720) {
-						if (hasEconomistLargeImage) continue;
-						hasEconomistLargeImage = true;
+					if ((width < 300 || height < 300) && !rules.keepWhenSmall?.(src, isChart)) continue;
+					if (rules.excludeSize?.({ width, height })) continue;
+					if (rules.firstLargeImageOnly && width >= 1280 && height >= 720) {
+						if (hasLargeImage) continue;
+						hasLargeImage = true;
 					}
 
 					seen.add(src);
@@ -1547,31 +1529,46 @@ Format exactly as shown:
 			maxTokens,
 		);
 
+		const response = await gmJsonRequest({
+			method: "POST",
+			url,
+			headers,
+			body,
+			timeout: CONFIG.timing.apiRequestTimeout,
+			timeoutMessage: `Request timed out after ${CONFIG.timing.apiRequestTimeout / 1000} seconds`,
+		});
+		return { ...response, service };
+	}
+
+	/**
+	 * The script's one network call: GM.xmlHttpRequest as a Promise of the status and
+	 * the parsed JSON body. Network errors, aborts, timeouts and unparseable bodies
+	 * reject with an Error.
+	 * @param {{ method: "GET" | "POST", url: string, headers?: Record<string, string>, body?: unknown, timeout: number, timeoutMessage: string }} request
+	 * @returns {Promise<{ status: number, statusText: string, data: any }>}
+	 */
+	function gmJsonRequest({ method, url, headers = {}, body, timeout, timeoutMessage }) {
 		return new Promise((resolve, reject) => {
 			GM.xmlHttpRequest({
-				method: "POST",
+				method,
 				url,
 				headers,
-				data: JSON.stringify(body),
+				...(body === undefined ? {} : { data: JSON.stringify(body) }),
 				responseType: "json",
-				timeout: CONFIG.timing.apiRequestTimeout,
+				timeout,
 				onload: response => {
-					const responseData = response.response || response.responseText;
-					resolve({
-						status: response.status,
-						data:
-							typeof responseData === "object" ? responseData : JSON.parse(responseData || "{}"),
-						statusText: response.statusText,
-						service, // Pass service for response handling
-					});
+					const raw = response.response || response.responseText;
+					try {
+						const data = typeof raw === "object" ? raw : JSON.parse(raw || "{}");
+						resolve({ status: response.status, statusText: response.statusText, data });
+					} catch (error) {
+						reject(error);
+					}
 				},
 				onerror: error =>
 					reject(new Error(`Network error: ${error.statusText || "Failed to connect"}`)),
 				onabort: () => reject(new Error("Request aborted")),
-				ontimeout: () =>
-					reject(
-						new Error(`Request timed out after ${CONFIG.timing.apiRequestTimeout / 1000} seconds`),
-					),
+				ontimeout: () => reject(new Error(timeoutMessage)),
 			});
 		});
 	}
@@ -1579,30 +1576,16 @@ Format exactly as shown:
 	// Shared GET + status-check + JSON-parse for the two providers' "list models" endpoints;
 	// each provider still does its own candidate filtering/sorting on the returned data.
 	/** @param {string} url @param {Record<string, string>} [headers] @returns {Promise<any>} */
-	function fetchModelsList(url, headers = {}) {
-		return new Promise((resolve, reject) => {
-			GM.xmlHttpRequest({
-				method: "GET",
-				url,
-				headers,
-				responseType: "json",
-				timeout: 10000,
-				onload: response => {
-					const data =
-						typeof response.response === "object"
-							? response.response
-							: JSON.parse(response.responseText || "{}");
-					if (response.status < 200 || response.status >= 300) {
-						reject(new Error(`Models API error: ${response.status}`));
-						return;
-					}
-					resolve(data);
-				},
-				onerror: err =>
-					reject(new Error(`Network error: ${err.statusText || "Failed to connect"}`)),
-				ontimeout: () => reject(new Error("Models API request timed out")),
-			});
+	async function fetchModelsList(url, headers = {}) {
+		const { status, data } = await gmJsonRequest({
+			method: "GET",
+			url,
+			headers,
+			timeout: 10000,
+			timeoutMessage: "Models API request timed out",
 		});
+		if (status < 200 || status >= 300) throw new Error(`Models API error: ${status}`);
+		return data;
 	}
 
 	const MODEL_CACHE_TTL = 24 * 60 * 60 * 1000;
@@ -2066,429 +2049,444 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 		return div.innerHTML;
 	}
 
-	// --- Image Lightbox Functions ---
-	let currentImageIndex = 0;
-	let lightboxZoom = { scale: 1, x: 0, y: 0 };
+	// --- Image Lightbox ---
+	// Owns its overlay, zoom/pan state and listeners; the rest of the script only calls
+	// Lightbox.open(images, index).
+	const Lightbox = (() => {
+		/** @type {{ overlay: HTMLElement | null, elements: LightboxElements | null, cleanup: (() => void) | null }} */
+		const lb = { overlay: null, elements: null, cleanup: null };
+		/** @type {ImageItem[]} */
+		let images = [];
 
-	/** @param {number} scale */
-	function clampZoomScale(scale) {
-		return Math.min(Math.max(scale, 1), 4);
-	}
+		let currentImageIndex = 0;
+		let lightboxZoom = { scale: 1, x: 0, y: 0 };
 
-	function applyLightboxZoomTransform() {
-		const img = dom.lightboxElements?.img;
-		if (!img) return;
-		img.style.transform = `translate(${lightboxZoom.x}px, ${lightboxZoom.y}px) scale(${lightboxZoom.scale})`;
-		img.style.cursor = lightboxZoom.scale > 1 ? "grab" : "zoom-in";
-	}
+		/** @param {number} scale */
+		function clampZoomScale(scale) {
+			return Math.min(Math.max(scale, 1), 4);
+		}
 
-	function resetLightboxZoom() {
-		lightboxZoom = { scale: 1, x: 0, y: 0 };
-		applyLightboxZoomTransform();
-	}
+		function applyLightboxZoomTransform() {
+			const img = lb.elements?.img;
+			if (!img) return;
+			img.style.transform = `translate(${lightboxZoom.x}px, ${lightboxZoom.y}px) scale(${lightboxZoom.scale})`;
+			img.style.cursor = lightboxZoom.scale > 1 ? "grab" : "zoom-in";
+		}
 
-	function toggleLightboxZoom() {
-		if (lightboxZoom.scale > 1) {
-			resetLightboxZoom();
-		} else {
-			lightboxZoom = { scale: 2.5, x: 0, y: 0 };
+		function resetLightboxZoom() {
+			lightboxZoom = { scale: 1, x: 0, y: 0 };
 			applyLightboxZoomTransform();
 		}
-	}
 
-	/** @param {number} index */
-	function openLightbox(index) {
-		if (!state.articleImages.length) return;
-
-		currentImageIndex = index;
-
-		if (!dom.lightbox) {
-			createLightbox();
-		}
-
-		updateLightboxImage();
-		if (dom.lightbox) dom.lightbox.style.display = "flex";
-		document.body.style.overflow = "hidden";
-	}
-
-	function closeLightbox() {
-		if (dom.lightbox) {
-			document.body.style.overflow = "";
-
-			// Cleanup event listeners to prevent memory leaks
-			if (dom.lightboxCleanup) {
-				dom.lightboxCleanup();
-				dom.lightboxCleanup = null;
-			}
-
-			// Remove the lightbox entirely so the next openLightbox() rebuilds it via
-			// createLightbox(), re-attaching the wheel/drag/pinch/touch listeners that
-			// dom.lightboxCleanup() just tore down (a stale-but-visible node would skip
-			// createLightbox() and leave those listeners missing on the next open).
-			dom.lightbox.remove();
-			dom.lightbox = null;
-			dom.lightboxElements = null;
-		}
-	}
-
-	function createLightbox() {
-		const lightbox = createElement("div", {
-			className: "sai-scope sai-lightbox-overlay",
-		});
-		dom.lightbox = lightbox;
-
-		// Create content container
-		const lightboxContent = createElement("div", {
-			className: "sai-lightbox-content",
-		});
-
-		const img = createElement("img", {
-			className: "sai-lightbox-image",
-			alt: "Full size image",
-			title: "Scroll or pinch to zoom, drag to pan, double-click/tap to reset",
-		});
-
-		const iframe = createElement("iframe", {
-			className: "sai-lightbox-iframe",
-			frameborder: "0",
-			scrolling: "no",
-			style: "display: none;",
-		});
-
-		lightboxContent.appendChild(img);
-		lightboxContent.appendChild(iframe);
-
-		// Create thumbnail strip
-		const thumbnailStrip = createElement("div", {
-			className: "sai-lightbox-thumbnails",
-		});
-
-		// Create menu bar at bottom (similar to summary overlay)
-		const menuBar = createElement("div", {
-			className: "sai-lightbox-menubar",
-		});
-
-		const prevBtn = createElement("button", {
-			className: "sai-menubar-button sai-lightbox-prev",
-			textContent: "← Prev",
-			onclick: () => navigateLightbox(-1),
-		});
-
-		const counter = createElement("div", {
-			className: "sai-lightbox-counter",
-		});
-
-		const nextBtn = createElement("button", {
-			className: "sai-menubar-button sai-lightbox-next",
-			textContent: "Next →",
-			onclick: () => navigateLightbox(1),
-		});
-
-		const closeBtn = createElement("button", {
-			className: "sai-menubar-button",
-			textContent: "Close",
-			title: "Close (Esc)",
-			onclick: closeLightbox,
-		});
-
-		menuBar.appendChild(prevBtn);
-		menuBar.appendChild(counter);
-		menuBar.appendChild(nextBtn);
-		menuBar.appendChild(closeBtn);
-
-		lightbox.appendChild(lightboxContent);
-		lightbox.appendChild(thumbnailStrip);
-		lightbox.appendChild(menuBar);
-		document.body.appendChild(lightbox);
-
-		// Cache lightbox elements to avoid repeated DOM queries
-		dom.lightboxElements = {
-			img,
-			iframe,
-			counter,
-			prevBtn,
-			nextBtn,
-			thumbnailStrip,
-		};
-
-		// Initialize thumbnails
-		renderThumbnails();
-
-		// Close on overlay click
-		/** @param {MouseEvent} e */
-		const overlayClickHandler = e => {
-			if (e.target === lightbox) {
-				closeLightbox();
-			}
-		};
-		lightbox.addEventListener("click", overlayClickHandler);
-
-		// Keyboard navigation
-		document.addEventListener("keydown", handleLightboxKeyboard);
-
-		// Touch/swipe/pan/pinch-zoom support
-		let touchStartX = 0;
-		let touchStartY = 0;
-		let touchEndX = 0;
-		let pinchStartDistance = 0;
-		let pinchStartScale = 1;
-		let panOrigin = { x: 0, y: 0 };
-		let panStart = { x: 0, y: 0 };
-		let isPanning = false;
-		let isPinching = false;
-		let lastTapTime = 0;
-
-		/** @param {TouchList} touches */
-		const getTouchDistance = touches =>
-			Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
-
-		/** @param {TouchEvent} e */
-		const touchStartHandler = e => {
-			if (e.touches.length === 2) {
-				isPinching = true;
-				pinchStartDistance = getTouchDistance(e.touches);
-				pinchStartScale = lightboxZoom.scale;
-			} else if (e.touches.length === 1) {
-				touchStartX = e.touches[0].screenX;
-				touchStartY = e.touches[0].screenY;
-				if (lightboxZoom.scale > 1) {
-					isPanning = true;
-					panOrigin = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-					panStart = { x: lightboxZoom.x, y: lightboxZoom.y };
-				}
-			}
-		};
-
-		/** @param {TouchEvent} e */
-		const touchMoveHandler = e => {
-			if (isPinching && e.touches.length === 2) {
-				e.preventDefault();
-				const distance = getTouchDistance(e.touches);
-				lightboxZoom.scale = clampZoomScale(pinchStartScale * (distance / pinchStartDistance));
-				applyLightboxZoomTransform();
-			} else if (isPanning && e.touches.length === 1) {
-				e.preventDefault();
-				lightboxZoom.x = panStart.x + (e.touches[0].clientX - panOrigin.x);
-				lightboxZoom.y = panStart.y + (e.touches[0].clientY - panOrigin.y);
-				applyLightboxZoomTransform();
-			}
-		};
-
-		/** @param {TouchEvent} e */
-		const touchEndHandler = e => {
-			if (e.touches.length > 0) return;
-
-			const wasPinch = isPinching;
-			const wasPan = isPanning;
-			isPinching = false;
-			isPanning = false;
-			if (wasPinch) return;
-
-			const touch = e.changedTouches[0];
-			touchEndX = touch.screenX;
-			const movedDistance = Math.hypot(touch.screenX - touchStartX, touch.screenY - touchStartY);
-
-			// A one-finger touch while zoomed in starts a pan, but one that barely moved is
-			// still a tap — otherwise double-tap could never reset the zoom.
-			if (movedDistance < 10) {
-				// Tap - check for double-tap to toggle zoom
-				const now = Date.now();
-				if (now - lastTapTime < 300) {
-					toggleLightboxZoom();
-					lastTapTime = 0;
-				} else {
-					lastTapTime = now;
-				}
-			} else if (!wasPan && lightboxZoom.scale <= 1) {
-				handleSwipe();
-			}
-		};
-
-		lightboxContent.addEventListener("touchstart", touchStartHandler, { passive: true });
-		lightboxContent.addEventListener("touchmove", touchMoveHandler, { passive: false });
-		lightboxContent.addEventListener("touchend", touchEndHandler, { passive: true });
-
-		function handleSwipe() {
-			const swipeThreshold = 50;
-			if (touchEndX < touchStartX - swipeThreshold) {
-				navigateLightbox(1); // Swipe left - next image
-			} else if (touchEndX > touchStartX + swipeThreshold) {
-				navigateLightbox(-1); // Swipe right - previous image
-			}
-		}
-
-		// Desktop zoom: wheel to zoom, drag to pan, double-click to toggle
-		/** @param {WheelEvent} e */
-		const wheelHandler = e => {
-			e.preventDefault();
-			const delta = e.deltaY < 0 ? 0.25 : -0.25;
-			lightboxZoom.scale = clampZoomScale(lightboxZoom.scale + delta);
-			if (lightboxZoom.scale === 1) {
-				lightboxZoom.x = 0;
-				lightboxZoom.y = 0;
-			}
-			applyLightboxZoomTransform();
-		};
-
-		const dblClickHandler = () => toggleLightboxZoom();
-
-		let isDragging = false;
-		let dragStart = { x: 0, y: 0 };
-		let dragPanStart = { x: 0, y: 0 };
-
-		/** @param {MouseEvent} e */
-		const mouseDownHandler = e => {
-			if (lightboxZoom.scale <= 1) return;
-			isDragging = true;
-			dragStart = { x: e.clientX, y: e.clientY };
-			dragPanStart = { x: lightboxZoom.x, y: lightboxZoom.y };
-			img.style.cursor = "grabbing";
-			e.preventDefault();
-		};
-		/** @param {MouseEvent} e */
-		const mouseMoveHandler = e => {
-			if (!isDragging) return;
-			lightboxZoom.x = dragPanStart.x + (e.clientX - dragStart.x);
-			lightboxZoom.y = dragPanStart.y + (e.clientY - dragStart.y);
-			applyLightboxZoomTransform();
-		};
-		const mouseUpHandler = () => {
-			isDragging = false;
-			applyLightboxZoomTransform();
-		};
-
-		img.addEventListener("wheel", wheelHandler, { passive: false });
-		img.addEventListener("dblclick", dblClickHandler);
-		img.addEventListener("mousedown", mouseDownHandler);
-		window.addEventListener("mousemove", mouseMoveHandler);
-		window.addEventListener("mouseup", mouseUpHandler);
-
-		// Store cleanup function to remove all event listeners
-		dom.lightboxCleanup = () => {
-			document.removeEventListener("keydown", handleLightboxKeyboard);
-			lightbox.removeEventListener("click", overlayClickHandler);
-			lightboxContent.removeEventListener("touchstart", touchStartHandler);
-			lightboxContent.removeEventListener("touchmove", touchMoveHandler);
-			lightboxContent.removeEventListener("touchend", touchEndHandler);
-			img.removeEventListener("wheel", wheelHandler);
-			img.removeEventListener("dblclick", dblClickHandler);
-			img.removeEventListener("mousedown", mouseDownHandler);
-			window.removeEventListener("mousemove", mouseMoveHandler);
-			window.removeEventListener("mouseup", mouseUpHandler);
-		};
-	}
-
-	function updateLightboxImage() {
-		if (!dom.lightbox || !dom.lightboxElements || !state.articleImages.length) return;
-
-		resetLightboxZoom();
-
-		const { img, iframe, counter, prevBtn, nextBtn, thumbnailStrip } = dom.lightboxElements;
-		const currentItem = state.articleImages[currentImageIndex];
-		counter.textContent = `${currentImageIndex + 1} / ${state.articleImages.length}`;
-
-		// Show image or iframe based on type
-		if (currentItem.type === "iframe") {
-			img.style.display = "none";
-			iframe.style.display = "block";
-			iframe.src = currentItem.src;
-			iframe.title = currentItem.alt || "Interactive visualization";
-		} else {
-			iframe.style.display = "none";
-			img.style.display = "block";
-			img.src = currentItem.src;
-			img.alt = currentItem.alt || "Article image";
-		}
-
-		// Disable/enable buttons at boundaries
-		prevBtn.disabled = currentImageIndex === 0;
-		nextBtn.disabled = currentImageIndex === state.articleImages.length - 1;
-
-		// Update active thumbnail highlight
-		const thumbnails = thumbnailStrip.querySelectorAll(".sai-lightbox-thumbnail-item");
-		thumbnails.forEach((thumb, idx) => {
-			if (idx === currentImageIndex) {
-				thumb.classList.add("sai-active");
+		function toggleLightboxZoom() {
+			if (lightboxZoom.scale > 1) {
+				resetLightboxZoom();
 			} else {
-				thumb.classList.remove("sai-active");
+				lightboxZoom = { scale: 2.5, x: 0, y: 0 };
+				applyLightboxZoomTransform();
 			}
-		});
-
-		// Scroll active thumbnail into view
-		const activeThumb = thumbnails[currentImageIndex];
-		if (activeThumb) {
-			activeThumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
 		}
-	}
 
-	/** @param {number} direction */
-	function navigateLightbox(direction) {
-		const newIndex = currentImageIndex + direction;
-		if (newIndex >= 0 && newIndex < state.articleImages.length) {
-			currentImageIndex = newIndex;
+		/** @param {ImageItem[]} items @param {number} index */
+		function openLightbox(items, index) {
+			if (!items.length) return;
+
+			images = items;
+			currentImageIndex = index;
+
+			if (!lb.overlay) {
+				createLightbox();
+			}
+
 			updateLightboxImage();
+			if (lb.overlay) lb.overlay.style.display = "flex";
+			document.body.style.overflow = "hidden";
 		}
-	}
 
-	function renderThumbnails() {
-		if (!dom.lightboxElements || !dom.lightboxElements.thumbnailStrip) return;
+		function closeLightbox() {
+			if (lb.overlay) {
+				document.body.style.overflow = "";
 
-		const { thumbnailStrip } = dom.lightboxElements;
-		thumbnailStrip.innerHTML = "";
+				// Cleanup event listeners to prevent memory leaks
+				if (lb.cleanup) {
+					lb.cleanup();
+					lb.cleanup = null;
+				}
 
-		state.articleImages.forEach((item, index) => {
-			const thumbItem = createElement("div", {
-				className: "sai-lightbox-thumbnail-item",
+				// Remove the lightbox entirely so the next openLightbox() rebuilds it via
+				// createLightbox(), re-attaching the wheel/drag/pinch/touch listeners that
+				// lb.cleanup() just tore down (a stale-but-visible node would skip
+				// createLightbox() and leave those listeners missing on the next open).
+				lb.overlay.remove();
+				lb.overlay = null;
+				lb.elements = null;
+			}
+		}
+
+		function createLightbox() {
+			const lightbox = createElement("div", {
+				className: "sai-scope sai-lightbox-overlay",
+			});
+			lb.overlay = lightbox;
+
+			// Create content container
+			const lightboxContent = createElement("div", {
+				className: "sai-lightbox-content",
 			});
 
-			const isIframe = item.type === "iframe";
+			const img = createElement("img", {
+				className: "sai-lightbox-image",
+				alt: "Full size image",
+				title: "Scroll or pinch to zoom, drag to pan, double-click/tap to reset",
+			});
 
-			// Create thumbnail image or iframe indicator
-			let thumbContent;
-			if (isIframe) {
-				thumbContent = createElement("div", {
-					className: "sai-lightbox-thumbnail-iframe-indicator",
-					textContent: "🖼️",
-					title: "Interactive content",
-				});
-			} else {
-				thumbContent = createElement("img", {
-					className: "sai-lightbox-thumbnail-img",
-					src: item.src,
-					alt: item.alt || `Image ${index + 1}`,
-				});
+			const iframe = createElement("iframe", {
+				className: "sai-lightbox-iframe",
+				frameborder: "0",
+				scrolling: "no",
+				style: "display: none;",
+			});
+
+			lightboxContent.appendChild(img);
+			lightboxContent.appendChild(iframe);
+
+			// Create thumbnail strip
+			const thumbnailStrip = createElement("div", {
+				className: "sai-lightbox-thumbnails",
+			});
+
+			// Create menu bar at bottom (similar to summary overlay)
+			const menuBar = createElement("div", {
+				className: "sai-lightbox-menubar",
+			});
+
+			const prevBtn = createElement("button", {
+				className: "sai-menubar-button sai-lightbox-prev",
+				textContent: "← Prev",
+				onclick: () => navigateLightbox(-1),
+			});
+
+			const counter = createElement("div", {
+				className: "sai-lightbox-counter",
+			});
+
+			const nextBtn = createElement("button", {
+				className: "sai-menubar-button sai-lightbox-next",
+				textContent: "Next →",
+				onclick: () => navigateLightbox(1),
+			});
+
+			const closeBtn = createElement("button", {
+				className: "sai-menubar-button",
+				textContent: "Close",
+				title: "Close (Esc)",
+				onclick: closeLightbox,
+			});
+
+			menuBar.appendChild(prevBtn);
+			menuBar.appendChild(counter);
+			menuBar.appendChild(nextBtn);
+			menuBar.appendChild(closeBtn);
+
+			lightbox.appendChild(lightboxContent);
+			lightbox.appendChild(thumbnailStrip);
+			lightbox.appendChild(menuBar);
+			document.body.appendChild(lightbox);
+
+			// Cache lightbox elements to avoid repeated DOM queries
+			lb.elements = {
+				img,
+				iframe,
+				counter,
+				prevBtn,
+				nextBtn,
+				thumbnailStrip,
+			};
+
+			// Initialize thumbnails
+			renderThumbnails();
+
+			// Close on overlay click
+			/** @param {MouseEvent} e */
+			const overlayClickHandler = e => {
+				if (e.target === lightbox) {
+					closeLightbox();
+				}
+			};
+			lightbox.addEventListener("click", overlayClickHandler);
+
+			// Keyboard navigation
+			document.addEventListener("keydown", handleLightboxKeyboard);
+
+			// Touch/swipe/pan/pinch-zoom support
+			let touchStartX = 0;
+			let touchStartY = 0;
+			let touchEndX = 0;
+			let pinchStartDistance = 0;
+			let pinchStartScale = 1;
+			let panOrigin = { x: 0, y: 0 };
+			let panStart = { x: 0, y: 0 };
+			let isPanning = false;
+			let isPinching = false;
+			let lastTapTime = 0;
+
+			/** @param {TouchList} touches */
+			const getTouchDistance = touches =>
+				Math.hypot(
+					touches[0].clientX - touches[1].clientX,
+					touches[0].clientY - touches[1].clientY,
+				);
+
+			/** @param {TouchEvent} e */
+			const touchStartHandler = e => {
+				if (e.touches.length === 2) {
+					isPinching = true;
+					pinchStartDistance = getTouchDistance(e.touches);
+					pinchStartScale = lightboxZoom.scale;
+				} else if (e.touches.length === 1) {
+					touchStartX = e.touches[0].screenX;
+					touchStartY = e.touches[0].screenY;
+					if (lightboxZoom.scale > 1) {
+						isPanning = true;
+						panOrigin = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+						panStart = { x: lightboxZoom.x, y: lightboxZoom.y };
+					}
+				}
+			};
+
+			/** @param {TouchEvent} e */
+			const touchMoveHandler = e => {
+				if (isPinching && e.touches.length === 2) {
+					e.preventDefault();
+					const distance = getTouchDistance(e.touches);
+					lightboxZoom.scale = clampZoomScale(pinchStartScale * (distance / pinchStartDistance));
+					applyLightboxZoomTransform();
+				} else if (isPanning && e.touches.length === 1) {
+					e.preventDefault();
+					lightboxZoom.x = panStart.x + (e.touches[0].clientX - panOrigin.x);
+					lightboxZoom.y = panStart.y + (e.touches[0].clientY - panOrigin.y);
+					applyLightboxZoomTransform();
+				}
+			};
+
+			/** @param {TouchEvent} e */
+			const touchEndHandler = e => {
+				if (e.touches.length > 0) return;
+
+				const wasPinch = isPinching;
+				const wasPan = isPanning;
+				isPinching = false;
+				isPanning = false;
+				if (wasPinch) return;
+
+				const touch = e.changedTouches[0];
+				touchEndX = touch.screenX;
+				const movedDistance = Math.hypot(touch.screenX - touchStartX, touch.screenY - touchStartY);
+
+				// A one-finger touch while zoomed in starts a pan, but one that barely moved is
+				// still a tap — otherwise double-tap could never reset the zoom.
+				if (movedDistance < 10) {
+					// Tap - check for double-tap to toggle zoom
+					const now = Date.now();
+					if (now - lastTapTime < 300) {
+						toggleLightboxZoom();
+						lastTapTime = 0;
+					} else {
+						lastTapTime = now;
+					}
+				} else if (!wasPan && lightboxZoom.scale <= 1) {
+					handleSwipe();
+				}
+			};
+
+			lightboxContent.addEventListener("touchstart", touchStartHandler, { passive: true });
+			lightboxContent.addEventListener("touchmove", touchMoveHandler, { passive: false });
+			lightboxContent.addEventListener("touchend", touchEndHandler, { passive: true });
+
+			function handleSwipe() {
+				const swipeThreshold = 50;
+				if (touchEndX < touchStartX - swipeThreshold) {
+					navigateLightbox(1); // Swipe left - next image
+				} else if (touchEndX > touchStartX + swipeThreshold) {
+					navigateLightbox(-1); // Swipe right - previous image
+				}
 			}
 
-			// Make thumbnail clickable to navigate
-			thumbContent.addEventListener("click", () => {
-				currentImageIndex = index;
-				updateLightboxImage();
+			// Desktop zoom: wheel to zoom, drag to pan, double-click to toggle
+			/** @param {WheelEvent} e */
+			const wheelHandler = e => {
+				e.preventDefault();
+				const delta = e.deltaY < 0 ? 0.25 : -0.25;
+				lightboxZoom.scale = clampZoomScale(lightboxZoom.scale + delta);
+				if (lightboxZoom.scale === 1) {
+					lightboxZoom.x = 0;
+					lightboxZoom.y = 0;
+				}
+				applyLightboxZoomTransform();
+			};
+
+			const dblClickHandler = () => toggleLightboxZoom();
+
+			let isDragging = false;
+			let dragStart = { x: 0, y: 0 };
+			let dragPanStart = { x: 0, y: 0 };
+
+			/** @param {MouseEvent} e */
+			const mouseDownHandler = e => {
+				if (lightboxZoom.scale <= 1) return;
+				isDragging = true;
+				dragStart = { x: e.clientX, y: e.clientY };
+				dragPanStart = { x: lightboxZoom.x, y: lightboxZoom.y };
+				img.style.cursor = "grabbing";
+				e.preventDefault();
+			};
+			/** @param {MouseEvent} e */
+			const mouseMoveHandler = e => {
+				if (!isDragging) return;
+				lightboxZoom.x = dragPanStart.x + (e.clientX - dragStart.x);
+				lightboxZoom.y = dragPanStart.y + (e.clientY - dragStart.y);
+				applyLightboxZoomTransform();
+			};
+			const mouseUpHandler = () => {
+				isDragging = false;
+				applyLightboxZoomTransform();
+			};
+
+			img.addEventListener("wheel", wheelHandler, { passive: false });
+			img.addEventListener("dblclick", dblClickHandler);
+			img.addEventListener("mousedown", mouseDownHandler);
+			window.addEventListener("mousemove", mouseMoveHandler);
+			window.addEventListener("mouseup", mouseUpHandler);
+
+			// Store cleanup function to remove all event listeners
+			lb.cleanup = () => {
+				document.removeEventListener("keydown", handleLightboxKeyboard);
+				lightbox.removeEventListener("click", overlayClickHandler);
+				lightboxContent.removeEventListener("touchstart", touchStartHandler);
+				lightboxContent.removeEventListener("touchmove", touchMoveHandler);
+				lightboxContent.removeEventListener("touchend", touchEndHandler);
+				img.removeEventListener("wheel", wheelHandler);
+				img.removeEventListener("dblclick", dblClickHandler);
+				img.removeEventListener("mousedown", mouseDownHandler);
+				window.removeEventListener("mousemove", mouseMoveHandler);
+				window.removeEventListener("mouseup", mouseUpHandler);
+			};
+		}
+
+		function updateLightboxImage() {
+			if (!lb.overlay || !lb.elements || !images.length) return;
+
+			resetLightboxZoom();
+
+			const { img, iframe, counter, prevBtn, nextBtn, thumbnailStrip } = lb.elements;
+			const currentItem = images[currentImageIndex];
+			counter.textContent = `${currentImageIndex + 1} / ${images.length}`;
+
+			// Show image or iframe based on type
+			if (currentItem.type === "iframe") {
+				img.style.display = "none";
+				iframe.style.display = "block";
+				iframe.src = currentItem.src;
+				iframe.title = currentItem.alt || "Interactive visualization";
+			} else {
+				iframe.style.display = "none";
+				img.style.display = "block";
+				img.src = currentItem.src;
+				img.alt = currentItem.alt || "Article image";
+			}
+
+			// Disable/enable buttons at boundaries
+			prevBtn.disabled = currentImageIndex === 0;
+			nextBtn.disabled = currentImageIndex === images.length - 1;
+
+			// Update active thumbnail highlight
+			const thumbnails = thumbnailStrip.querySelectorAll(".sai-lightbox-thumbnail-item");
+			thumbnails.forEach((thumb, idx) => {
+				if (idx === currentImageIndex) {
+					thumb.classList.add("sai-active");
+				} else {
+					thumb.classList.remove("sai-active");
+				}
 			});
 
-			thumbItem.appendChild(thumbContent);
-			thumbnailStrip.appendChild(thumbItem);
-		});
-	}
-
-	/** @param {KeyboardEvent} e */
-	function handleLightboxKeyboard(e) {
-		if (!dom.lightbox || dom.lightbox.style.display === "none") return;
-
-		switch (e.key) {
-			case "Escape":
-				e.preventDefault();
-				closeLightbox();
-				break;
-			case "ArrowLeft":
-				e.preventDefault();
-				navigateLightbox(-1);
-				break;
-			case "ArrowRight":
-				e.preventDefault();
-				navigateLightbox(1);
-				break;
+			// Scroll active thumbnail into view
+			const activeThumb = thumbnails[currentImageIndex];
+			if (activeThumb) {
+				activeThumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+			}
 		}
-	}
+
+		/** @param {number} direction */
+		function navigateLightbox(direction) {
+			const newIndex = currentImageIndex + direction;
+			if (newIndex >= 0 && newIndex < images.length) {
+				currentImageIndex = newIndex;
+				updateLightboxImage();
+			}
+		}
+
+		function renderThumbnails() {
+			if (!lb.elements?.thumbnailStrip) return;
+
+			const { thumbnailStrip } = lb.elements;
+			thumbnailStrip.innerHTML = "";
+
+			images.forEach((item, index) => {
+				const thumbItem = createElement("div", {
+					className: "sai-lightbox-thumbnail-item",
+				});
+
+				const isIframe = item.type === "iframe";
+
+				// Create thumbnail image or iframe indicator
+				let thumbContent;
+				if (isIframe) {
+					thumbContent = createElement("div", {
+						className: "sai-lightbox-thumbnail-iframe-indicator",
+						textContent: "🖼️",
+						title: "Interactive content",
+					});
+				} else {
+					thumbContent = createElement("img", {
+						className: "sai-lightbox-thumbnail-img",
+						src: item.src,
+						alt: item.alt || `Image ${index + 1}`,
+					});
+				}
+
+				// Make thumbnail clickable to navigate
+				thumbContent.addEventListener("click", () => {
+					currentImageIndex = index;
+					updateLightboxImage();
+				});
+
+				thumbItem.appendChild(thumbContent);
+				thumbnailStrip.appendChild(thumbItem);
+			});
+		}
+
+		/** @param {KeyboardEvent} e */
+		function handleLightboxKeyboard(e) {
+			if (!lb.overlay || lb.overlay.style.display === "none") return;
+
+			switch (e.key) {
+				case "Escape":
+					e.preventDefault();
+					closeLightbox();
+					break;
+				case "ArrowLeft":
+					e.preventDefault();
+					navigateLightbox(-1);
+					break;
+				case "ArrowRight":
+					e.preventDefault();
+					navigateLightbox(1);
+					break;
+			}
+		}
+
+		return { open: openLightbox };
+	})();
 
 	// --- Event Handlers & Utilities ---
 	/** @param {KeyboardEvent} e */

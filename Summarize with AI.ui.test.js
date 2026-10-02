@@ -789,6 +789,7 @@ describe("site-specific image filtering", () => {
 				<img src="https://www.mckinsey.com/exhibit-thumb.png">
 				<img src="https://www.mckinsey.com/headshot-2.png">
 				<img src="https://www.mckinsey.com/exhibit-1.svgz" alt="Exhibit 1">
+				<img src="https://www.mckinsey.com/exhibit-2.svg" alt="Exhibit 2">
 			</article>`,
 		});
 		for (const img of page.$$("article img").slice(0, 3)) sized(img, 1200, 800);
@@ -796,7 +797,10 @@ describe("site-specific image filtering", () => {
 		page.byId("sai-summarize-button").click();
 		await settle();
 
-		expect(page.$$(".sai-gallery-item img").map(img => img.alt)).toEqual(["Exhibit 1"]);
+		expect(page.$$(".sai-gallery-item img").map(img => img.alt)).toEqual([
+			"Exhibit 1",
+			"Exhibit 2",
+		]);
 	});
 
 	it("waits for lazy images and reads deferred sources", async () => {
@@ -836,6 +840,32 @@ describe("less common API responses", () => {
 
 		expect(JSON.parse(/** @type {string} */ (posts(page)[0].data)).model).toBe("claude-sonnet-6-1");
 		expect(page.$(".sai-summary-content-body").textContent).toBe("From text");
+	});
+
+	it("keeps the default model when the models API answers with an error status", async () => {
+		const page = await loadPage({ storage: KEYED });
+		page.respondWith(req =>
+			req.method === "GET"
+				? { status: 500, response: { data: [{ id: "claude-sonnet-9-9" }] } }
+				: defaultResponder(req),
+		);
+
+		page.byId("sai-summarize-button").click();
+		await settle();
+
+		expect(JSON.parse(/** @type {string} */ (posts(page)[0].data)).model).toBe("claude-sonnet-4-6");
+	});
+
+	it("shows an error instead of hanging when the API body is not JSON", async () => {
+		const page = await loadPage({ storage: KEYED });
+		page.respondWith(req =>
+			req.method === "GET" ? defaultResponder(req) : { status: 502, response: "<html>Bad gateway" },
+		);
+
+		page.byId("sai-summarize-button").click();
+		await settle();
+
+		expect(page.byId("sai-summarize-content").textContent).toContain("JSON");
 	});
 
 	it("keeps the default model when model discovery fails or finds nothing", async () => {
