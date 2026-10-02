@@ -37,7 +37,8 @@ tasks:
     cmds:
       - pnpm audit
       - >
-        docker run --rm -v "{{.TASKFILE_DIR}}:/src" semgrep/semgrep
+        docker run --rm -v "{{.TASKFILE_DIR}}:/src" -v semgrep-cache:/root/.semgrep
+        -e HOME=/root -e SEMGREP_ENABLE_VERSION_CHECK=0 semgrep/semgrep
         semgrep scan --config p/javascript --config p/nodejsscan
         --metrics off --error /src
 
