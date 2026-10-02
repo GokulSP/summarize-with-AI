@@ -696,6 +696,8 @@ describe("image gallery and lightbox", () => {
 
 		fire(page.window, page.document, "keydown", { key: "Escape" });
 		expect(page.$(".sai-lightbox-overlay")).toBeNull();
+		// Escape closes only the lightbox; the summary it was opened from stays.
+		expect(page.byId("sai-summarize-overlay")).not.toBeNull();
 	});
 
 	it("zooms and pans with wheel, drag, double-click, pinch and double-tap", async () => {

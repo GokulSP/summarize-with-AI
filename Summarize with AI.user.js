@@ -2059,7 +2059,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 
 	// --- Image Lightbox ---
 	// Owns its overlay, zoom/pan state and listeners; the rest of the script only calls
-	// Lightbox.open(images, index).
+	// Lightbox.open(images, index) and asks Lightbox.isOpen().
 	const Lightbox = (() => {
 		/** @type {{ overlay: HTMLElement | null, elements: LightboxElements | null, cleanup: (() => void) | null }} */
 		const lb = { overlay: null, elements: null, cleanup: null };
@@ -2493,7 +2493,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			}
 		}
 
-		return { open: openLightbox };
+		return { open: openLightbox, isOpen: () => lb.overlay !== null };
 	})();
 
 	// --- Keyboard Shortcuts ---
@@ -2505,7 +2505,9 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 				processSummarization();
 			}
 		}
-		if (e.key === "Escape") {
+		// The lightbox handles its own Escape; it sits above the overlay it opened from,
+		// so one press must close only the lightbox.
+		if (e.key === "Escape" && !Lightbox.isOpen()) {
 			if (Overlay.isOpen()) {
 				e.preventDefault();
 				Overlay.close();
