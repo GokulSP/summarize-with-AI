@@ -454,7 +454,10 @@ describe("summarizing with Gemini", () => {
 			"x-goog-api-key": "g-key",
 		});
 		expect(page.storage.get("last_used_model")).toBe("gemini-4.0-flash");
-		expect(page.$(".sai-summary-content-body").textContent).toBe("Flash says");
+		expect(page.$(".sai-summary-content-body p")?.textContent).toBe("Flash says");
+		expect(page.$(".sai-summary-content-body .sai-error-text")?.textContent).toBe(
+			"The response was cut short because it hit the model’s length limit.",
+		);
 	});
 
 	it("falls back to the stable model when the discovered one needs the Interactions API", async () => {

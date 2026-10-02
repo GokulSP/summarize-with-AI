@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Summarize with AI
 // @namespace   https://github.com/GokulSP/summarize-with-AI
-// @version     2026.10.02.02
+// @version     2026.10.03.01
 // @description Single-button AI summarization (Claude & Gemini) with model selection dropdown for articles/news. Uses Alt+S shortcut. Long press 'S' (tap-and-hold on mobile, Arrow Up from the keyboard) to select model. Custom modals with Dieter Rams-inspired design. Adapts to dark mode and mobile viewports.
 // @author      Hélio <open@helio.me>
 // @contributor Gokul SP (Personal fork maintainer)
@@ -60,7 +60,7 @@
 
 		// Length & Size Limits
 		limits: {
-			defaultMaxTokens: 1000,
+			defaultMaxTokens: 2000,
 			targetWordCount: 300,
 			bulletPointMaxWords: 20,
 			maxImages: 12,
@@ -1787,10 +1787,20 @@ Format exactly as shown:
 		return { rawSummary, finishReason, blockType };
 	}
 
+	// A model can emit well-formed HTML right up to the cutoff (e.g. stopping after
+	// "<p><strong>Key Points:</strong></p>" with no <ul> yet), so the sanitizer sees
+	// valid markup and the truncation is otherwise invisible in the rendered output.
+	/** @param {string | null} finishReason @param {Service} service @returns {string} */
+	function truncationNotice(finishReason, service) {
+		if (finishReason !== PROVIDERS[service].truncatedReason) return "";
+		return '<p class="sai-error-text">The response was cut short because it hit the model’s length limit.</p>';
+	}
+
 	/** @param {ApiResponse} response */
 	function handleApiResponse(response) {
-		const { rawSummary } = extractSummaryFromResponse(response);
-		const cleanedSummary = cleanSummaryHTML(rawSummary);
+		const { rawSummary, finishReason } = extractSummaryFromResponse(response);
+		const cleanedSummary =
+			cleanSummaryHTML(rawSummary) + truncationNotice(finishReason, response.service);
 		state.summaryCache.set(state.activeModel, {
 			articleData: state.articleData,
 			images: state.articleImages,
@@ -1956,15 +1966,16 @@ Question: ${question}
 Keep your answer under 150 words. Write in clear paragraphs. No section headers.`;
 
 			let answer;
+			let finishReason;
 			try {
 				const response = await sendApiRequest(service, apiKey, prompt, modelConfig, 800);
-				answer = extractSummaryFromResponse(response).rawSummary;
+				({ rawSummary: answer, finishReason } = extractSummaryFromResponse(response));
 			} catch (/** @type {any} */ err) {
 				throw annotateModelError(err, modelConfig.id);
 			}
 
 			// Format the answer with proper HTML structure
-			const formattedAnswer = formatQAAnswer(answer);
+			const formattedAnswer = formatQAAnswer(answer) + truncationNotice(finishReason, service);
 
 			answerBox.showAnswer(`
         <div class="sai-answer">
@@ -3570,6 +3581,7 @@ Keep your answer under 150 words. Write in clear paragraphs. No section headers.
 			formatQAAnswer,
 			cleanSummaryHTML,
 			extractSummaryFromResponse,
+			truncationNotice,
 		};
 	}
 })();

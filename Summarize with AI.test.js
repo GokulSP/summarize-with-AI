@@ -13,7 +13,7 @@ const USER_JS_PATH = path.join(
 /**
  * Runs the userscript source in a sandbox with a fake `module`, so its guarded
  * `module.exports` block fires (skipping `initialize()`) instead of running as a browser script.
- * @type {{escapeHtml: Function, formatQAAnswer: Function, cleanSummaryHTML: Function, extractSummaryFromResponse: Function}}
+ * @type {{escapeHtml: Function, formatQAAnswer: Function, cleanSummaryHTML: Function, extractSummaryFromResponse: Function, truncationNotice: Function}}
  */
 let helpers;
 
@@ -202,5 +202,24 @@ describe("extractSummaryFromResponse", () => {
 				data: { content: [] },
 			}),
 		).toThrow("API response did not contain a valid summary (status: 200).");
+	});
+});
+
+describe("truncationNotice", () => {
+	it("is empty when the finish reason isn't the provider's truncation one", () => {
+		expect(helpers.truncationNotice("end_turn", "claude")).toBe("");
+		expect(helpers.truncationNotice(null, "gemini")).toBe("");
+	});
+
+	it("flags a Claude response cut off by max_tokens", () => {
+		expect(helpers.truncationNotice("max_tokens", "claude")).toBe(
+			'<p class="sai-error-text">The response was cut short because it hit the model’s length limit.</p>',
+		);
+	});
+
+	it("flags a Gemini response cut off by MAX_TOKENS", () => {
+		expect(helpers.truncationNotice("MAX_TOKENS", "gemini")).toBe(
+			'<p class="sai-error-text">The response was cut short because it hit the model’s length limit.</p>',
+		);
 	});
 });
