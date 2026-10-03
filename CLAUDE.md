@@ -1,4 +1,4 @@
-# CLAUDE.md
+# summarize-with-AI
 
 Project-specific notes for summarize-with-AI. See README.md for setup, usage, and dev commands.
 
