@@ -70,15 +70,25 @@ WTFPL — see [LICENSE](LICENSE). Original work by Hélio ([@insign](https://git
 
 ## Project structure
 
-| Path | Purpose |
-| --- | --- |
-| `Summarize with AI.user.js` | The entire userscript — UI, summarization logic, API calls, image gallery, Q&A |
-| `Summarize with AI.meta.js` | Userscript-manager metadata, auto-derived from `.user.js`'s `@version` header |
-| `Summarize with AI.test.js` | Unit tests for pure logic |
-| `Summarize with AI.ui.test.js` | Happy-dom UI/interaction tests (clicks, long-press, keys, touches) |
-| `scripts/sync-metadata.js` | Derives `.meta.js` and `package.json`'s version from `.user.js`'s `@version` header (run by lefthook's pre-commit `metadata` stage) |
-| `Taskfile.yml` | Single source of truth for every command |
-| `lefthook.yml` | Git hooks configuration |
-| `biome.json` | Biome lint/format configuration |
-| `jsconfig.json` | JS type-checking configuration (`tsc --checkJs`) |
-| `package.json` / `pnpm-lock.yaml` | pnpm package manifest and lockfile |
+```text
+summarize-with-AI/
+├── scripts/
+│   └── sync-metadata.js            # + sync-metadata.test.js — derives .meta.js/package.json's version from .user.js's @version header; run by lefthook's pre-commit metadata stage
+├── .editorconfig
+├── .gitignore
+├── .rumdl.toml                      # rumdl config for task lint:md
+├── LICENSE                          # WTFPL — original work by Hélio (@insign), fork maintained by Gokul SP
+├── Summarize with AI.user.js        # The entire userscript — UI, summarization logic, API calls, image gallery, Q&A
+├── Summarize with AI.meta.js        # Userscript-manager metadata, auto-derived from .user.js's @version header
+├── Summarize with AI.test.js        # Unit tests for pure logic
+├── Summarize with AI.ui.test.js     # Happy-dom UI/interaction tests (clicks, long-press, keys, touches)
+├── Taskfile.yml                     # Single source of truth for every command
+├── biome.json                       # Biome lint/format configuration
+├── global.d.ts                      # Ambient globals for the @require'd Readability.js CDN scripts (tsc --checkJs)
+├── jsconfig.json                    # JS type-checking configuration (tsc --checkJs)
+├── knip.jsonc                       # knip (unused files/exports/packages) configuration
+├── lefthook.yml                     # Git hooks configuration
+├── package.json                     # pnpm package manifest
+├── pnpm-lock.yaml                   # pnpm lockfile
+└── pnpm-workspace.yaml              # pnpm workspace config — supply-chain cooldown (minimumReleaseAge), build allowlist, nanoid override
+```
