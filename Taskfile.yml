@@ -29,7 +29,7 @@ tasks:
       - >-
         pnpm exec vitest run --coverage --coverage.include="*.user.js" --coverage.include="scripts/*.js"
         --coverage.reporter=text --coverage.thresholds.lines=80
-        --coverage.thresholds.branches=80
+        --coverage.thresholds.branches=80 {{.CLI_ARGS}}
 
   audit:
     deps: [audit:js]

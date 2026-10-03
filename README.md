@@ -17,6 +17,7 @@ A userscript that summarizes articles with Claude or Gemini in one click, with a
 1. Install a userscript manager: [Tampermonkey](https://www.tampermonkey.net/), [Violentmonkey](https://violentmonkey.github.io/), or [Greasemonkey](https://www.greasespot.net/)
 2. Click to install: **[Summarize with AI](https://gokulsp.github.io/summarize-with-AI/Summarize%20with%20AI.user.js)**
 3. Visit a supported site and enter your [Anthropic](https://console.anthropic.com/) or [Google AI](https://aistudio.google.com/apikey) API key when prompted
+4. Verify: open your userscript manager's dashboard and confirm "Summarize with AI" is listed and enabled
 
 ## Development
 
@@ -27,6 +28,9 @@ task typecheck  # tsc --checkJs
 task test       # vitest, failing under the coverage floors
 task audit      # pnpm audit + semgrep
 task ci         # every gate on every file plus a full-history secret scan
+
+# Scope test to a single test:
+task test -- "Summarize with AI.ui.test.js" -t "long press"
 ```
 
 `Summarize with AI.ui.test.js` runs the real userscript in a happy-dom page with only the userscript manager (`GM.*`) and the `@require`d Readability stood in, then drives it like a user: clicks, long presses, keys, touches.
